@@ -6,6 +6,17 @@ The source entry point is `src/main.nia`. It reads an ELF file into one heap
 buffer, parses ELF32/ELF64 headers in little or big endian, and exposes a few
 quick inspection commands without a REPL.
 
+## Requirements
+
+This project is written in [Nia](https://github.com/nialang/nia). Build it with
+`niac`, the Nia compiler.
+
+If you have Rust/Cargo installed, one way to install the compiler is:
+
+```sh
+cargo install --git https://github.com/nialang/nia nia-cli
+```
+
 ## Layout
 
 - `src/main.nia` - CLI parsing, file IO, and top-level resource cleanup
@@ -48,3 +59,7 @@ Example:
 The input buffer is allocated with `malloc` based on the file size and released
 after parsing. Section data, symbol names, dumps, strings, and relocations are
 read as slices over that buffer instead of being copied into secondary storage.
+
+## License
+
+MIT. See `LICENSE`.

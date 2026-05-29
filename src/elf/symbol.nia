@@ -1,0 +1,229 @@
+import ..c;
+import ..util;
+import .header;
+import .section;
+import .types;
+
+using c::*;
+using types::*;
+using util::*;
+
+extend SymbolInfo {
+    // Read one symbol table entry. ELF32 stores name/value/size first, while
+    // ELF64 puts info and section index before value/size.
+    pub fn read(buf: &const [u8], class: u8, off: usize, little: bool) SymbolInfo {
+        if class == ELFCLASS32 {
+            return {
+                name: read_u32(buf, off, little),
+                value: read_u32(buf, off + 4, little) as u64,
+                size: read_u32(buf, off + 8, little) as u64,
+                info: buf[off + 12],
+                shndx: read_u16(buf, off + 14, little),
+            };
+        }
+
+        {
+            name: read_u32(buf, off, little),
+            info: buf[off + 4],
+            shndx: read_u16(buf, off + 6, little),
+            value: read_u64(buf, off + 8, little),
+            size: read_u64(buf, off + 16, little),
+        }
+    }
+}
+
+extend ElfFile {
+    // Resolve a relocation's symbol index back to a printable name through the
+    // symbol table's linked string table.
+    pub fn symbol_name_at(
+        &const self,
+        buf: &const [u8],
+        symtab: &const SectionHeader,
+        index: u64,
+    ) &const u8 {
+        if index == 0 or symtab.entsize == 0 or symtab.link >= self.section_count as u32 {
+            return c"";
+        }
+        if index * symtab.entsize >= symtab.size {
+            return c"";
+        }
+
+        var strtab = self.section_bytes(buf, &const self.sections[symtab.link as usize]);
+        if @len(strtab) == 0 {
+            return c"";
+        }
+
+        var off64 = symtab.offset + (index * symtab.entsize);
+        if off64 + symtab.entsize > @len(buf) as u64 {
+            return c"";
+        }
+
+        var sym = SymbolInfo::read(buf, self.header.class, off64 as usize, self.header.little);
+        cstr_at(strtab, sym.name)
+    }
+
+    fn print_symbols_for(&const self, buf: &const [u8], symtab: &const SectionHeader, title: &const u8) void {
+        // sh_link of a symbol table points to the string table containing names.
+        if symtab.entsize == 0 or symtab.link >= self.section_count as u32 {
+            return;
+        }
+
+        var strtab = self.section_bytes(buf, &const self.sections[symtab.link as usize]);
+        if @len(strtab) == 0 {
+            return;
+        }
+
+        printf(c"\n%s\n", title);
+        var count = symtab.size / symtab.entsize;
+        for var i: u64 = 1; i < count; i += 1 {
+            var off64 = symtab.offset + (i * symtab.entsize);
+            if off64 + symtab.entsize > @len(buf) as u64 {
+                break;
+            }
+            var sym = SymbolInfo::read(buf, self.header.class, off64 as usize, self.header.little);
+            if sym.printable() {
+                printf(
+                    c"  0x%016llx %-6s %5llu %s\n",
+                    sym.value,
+                    sym.kind_name(),
+                    sym.size,
+                    cstr_at(strtab, sym.name),
+                );
+            }
+        }
+    }
+
+    pub fn print_symbols(&const self, buf: &const [u8]) void {
+        // Dynamic symbols are usually more relevant for stripped binaries, so
+        // print them before the full static symbol table when both exist.
+        for var i: u16 = 0; i < self.section_count; i += 1 {
+            if self.sections[i as usize].kind == SHT_DYNSYM {
+                self.print_symbols_for(buf, &const self.sections[i as usize], c"Dynamic symbols");
+            }
+        }
+        for var i: u16 = 0; i < self.section_count; i += 1 {
+            if self.sections[i as usize].kind == SHT_SYMTAB {
+                self.print_symbols_for(buf, &const self.sections[i as usize], c"Symbols");
+            }
+        }
+    }
+
+    fn resolve_symbol(&const self, buf: &const [u8], addr: u64) void {
+        var found = false;
+        var best_value: u64 = 0;
+        var best_name: &const u8 = c"";
+        var best_kind: u8 = 0;
+        var best_symtab = false;
+
+        // Prefer SYMTAB over DYNSYM when present. Within each table, keep the
+        // nearest symbol whose address is before the queried address; exact
+        // containing symbols stop the scan for that table.
+        for var pass: u16 = 0; pass < 2; pass += 1 {
+            var want_kind: u32 = if pass == 0 { SHT_SYMTAB } else { SHT_DYNSYM };
+
+            for var si: u16 = 0; si < self.section_count; si += 1 {
+                var symtab = self.sections[si as usize];
+                if symtab.kind != want_kind or symtab.entsize == 0 or symtab.link >= self.section_count as u32 {
+                    continue;
+                }
+
+                var strtab = self.section_bytes(buf, &const self.sections[symtab.link as usize]);
+                if @len(strtab) == 0 {
+                    continue;
+                }
+
+                var count = symtab.size / symtab.entsize;
+                for var i: u64 = 1; i < count; i += 1 {
+                    var off64 = symtab.offset + (i * symtab.entsize);
+                    if off64 + symtab.entsize > @len(buf) as u64 {
+                        break;
+                    }
+                    var sym = SymbolInfo::read(buf, self.header.class, off64 as usize, self.header.little);
+                    if !sym.printable() or !sym.before_or_at(addr) {
+                        continue;
+                    }
+                    if sym.contains_addr(addr) or !found or sym.value > best_value {
+                        found = true;
+                        best_value = sym.value;
+                        best_name = cstr_at(strtab, sym.name);
+                        best_kind = sym.kind();
+                        best_symtab = pass == 0;
+                        if sym.contains_addr(addr) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if found {
+            var delta = addr - best_value;
+            var kind_name: &const u8 = switch best_kind {
+                STT_OBJECT => c"OBJECT",
+                STT_FUNC => c"FUNC",
+                _ => c"OTHER",
+            };
+            var source: &const u8 = if best_symtab { c"SYMTAB" } else { c"DYNSYM" };
+            if delta == 0 {
+                printf(c"  Symbol   : %s (%s, %s)\n", best_name, kind_name, source);
+            } else {
+                printf(c"  Symbol   : %s+0x%llx (%s, %s)\n", best_name, delta, kind_name, source);
+            }
+        } else {
+            printf(c"  Symbol   : (no matching symbol)\n");
+        }
+    }
+
+    pub fn resolve_addr(&const self, buf: &const [u8], addr: u64) void {
+        printf(c"\nAddress\n");
+        printf(c"  Address  : 0x%016llx\n", addr);
+
+        // First map virtual address to a LOAD segment and file offset. Sections
+        // and symbols are useful names, but PT_LOAD is the executable mapping.
+        var found_segment = false;
+        for var i: u16 = 0; i < self.header.phnum; i += 1 {
+            var off64 = self.header.phoff + (i as u64 * self.header.phentsize as u64);
+            if off64 + self.header.phentsize as u64 > @len(buf) as u64 {
+                break;
+            }
+
+            var ph = ProgramHeader::read(
+                buf,
+                self.header.class,
+                off64 as usize,
+                self.header.little,
+            );
+            if ph.contains_addr(addr) {
+                printf(c"  Segment  : [%u] %s ", i as u32, ph.name());
+                ph.print_flags();
+                printf(c" vaddr=0x%016llx\n", ph.vaddr);
+                printf(c"  File off : 0x%08llx\n", ph.file_offset_for(addr));
+                found_segment = true;
+                break;
+            }
+        }
+        if !found_segment {
+            printf(c"  Segment  : (not in any PT_LOAD segment)\n");
+        }
+
+        // Then report the containing allocatable section, if any.
+        var found_section = false;
+        for var i: u16 = 0; i < self.section_count; i += 1 {
+            if self.sections[i as usize].contains_addr(addr) {
+                printf(
+                    c"  Section  : [%u] %s\n",
+                    i as u32,
+                    cstr_at(self.shstrtab, self.sections[i as usize].name),
+                );
+                found_section = true;
+                break;
+            }
+        }
+        if !found_section {
+            printf(c"  Section  : (no matching section)\n");
+        }
+        // Finally add the best symbol name so users can interpret offsets inside
+        // functions or objects.
+        self.resolve_symbol(buf, addr);
+    }
+}

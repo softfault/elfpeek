@@ -1,0 +1,125 @@
+import ..c;
+import ..util;
+import .section;
+import .symbol;
+import .types;
+
+using c::*;
+using types::*;
+using util::*;
+
+extend RelocationInfo {
+    // Read REL or RELA entries. RELA carries an explicit addend; REL leaves it
+    // in the relocated location, so this tool prints zero for REL addends.
+    pub fn read(buf: &const [u8], class: u8, off: usize, rela: bool, little: bool) RelocationInfo {
+        if class == ELFCLASS32 {
+            var info32 = read_u32(buf, off + 4, little) as u64;
+            var addend32: u64 = 0;
+            if rela {
+                addend32 = read_u32(buf, off + 8, little) as u64;
+            }
+            return {
+                offset: read_u32(buf, off, little) as u64,
+                info: info32,
+                addend: addend32,
+                rela: rela,
+            };
+        }
+
+        var addend64: u64 = 0;
+        if rela {
+            addend64 = read_u64(buf, off + 16, little);
+        }
+        {
+            offset: read_u64(buf, off, little),
+            info: read_u64(buf, off + 8, little),
+            addend: addend64,
+            rela: rela,
+        }
+    }
+}
+
+extend ElfFile {
+    // Walk all relocation sections and print their decoded type, symbol index,
+    // optional addend, and symbol name when the linked symbol table is present.
+    pub fn print_relocations(&const self, buf: &const [u8]) i32 {
+        var found = false;
+
+        for var i: u16 = 0; i < self.section_count; i += 1 {
+            var relsec = self.sections[i as usize];
+            if !relsec.is_relocation_table() {
+                continue;
+            }
+
+            var rela = relsec.kind == SHT_RELA;
+            var entsize = relsec.entsize;
+            if entsize == 0 {
+                // Some malformed or minimal files may omit sh_entsize. Fall
+                // back to the ABI sizes so useful data can still be printed.
+                entsize = if self.header.class == ELFCLASS32 {
+                    if rela { 12 } else { 8 }
+                } else {
+                    if rela { 24 } else { 16 }
+                };
+            }
+            if entsize == 0 or relsec.offset + relsec.size > @len(buf) as u64 {
+                continue;
+            }
+
+            var symtab = SectionHeader::empty();
+            var has_symtab = false;
+            if relsec.link < self.section_count as u32 {
+                // sh_link of a relocation section usually names the symbol table
+                // used by r_info's symbol index.
+                symtab = self.sections[relsec.link as usize];
+                has_symtab = symtab.is_symbol_table();
+            }
+
+            var count = relsec.size / entsize;
+            if count == 0 {
+                continue;
+            }
+
+            printf(c"\nRelocations from %s (%llu entries)\n", cstr_at(self.shstrtab, relsec.name), count);
+            found = true;
+
+            for var j: u64 = 0; j < count; j += 1 {
+                var off64 = relsec.offset + (j * entsize);
+                if off64 + entsize > @len(buf) as u64 {
+                    break;
+                }
+
+                var rel = RelocationInfo::read(
+                    buf,
+                    self.header.class,
+                    off64 as usize,
+                    rela,
+                    self.header.little,
+                );
+                var sym_index = rel.symbol_index(self.header.class);
+                printf(
+                    c"  0x%012llx  type=%u  sym=%llu",
+                    rel.offset,
+                    rel.kind(self.header.class),
+                    sym_index,
+                );
+                if rela and rel.addend != 0 {
+                    printf(c"  addend=%lld", rel.addend);
+                }
+                if has_symtab {
+                    var name = self.symbol_name_at(buf, &const symtab, sym_index);
+                    if name[0] != 0u8 {
+                        printf(c"  %s", name);
+                    }
+                }
+                printf(c"\n");
+            }
+        }
+
+        if !found {
+            printf(c"\nRelocations\n  (no relocation sections)\n");
+        }
+
+        0
+    }
+}

@@ -1,0 +1,14 @@
+pub extern fn printf(fmt: &const u8, ...);
+pub extern fn fprintf(stream: &void, fmt: &const u8, ...);
+pub extern fn perror(prefix: &const u8);
+pub extern var stderr: &void;
+pub extern fn fopen(path: &const u8, mode: &const u8) &void;
+pub extern fn fclose(file: &void) i32;
+pub extern fn fread(ptr: &void, size: usize, count: usize, stream: &void) usize;
+pub extern fn fseek(stream: &void, offset: i64, whence: i32) i32;
+pub extern fn ftell(stream: &void) i64;
+pub extern fn malloc(size: usize) &void;
+pub extern fn free(ptr: &void);
+pub extern fn strtoull(nptr: &const u8, endptr: &void, base: i32) u64;
+pub extern fn strcmp(a: &const u8, b: &const u8) i32;
+pub extern fn putchar(ch: i32) i32;

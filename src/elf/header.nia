@@ -1,0 +1,225 @@
+import ..c;
+import ..util;
+import .types;
+
+using c::*;
+using types::*;
+using util::*;
+
+// Small name mappers keep printing code readable without introducing storage.
+fn print_class(class: u8) void {
+    var text: &const u8 = switch class {
+        1 => c"ELF32",
+        2 => c"ELF64",
+        _ => c"unknown",
+    };
+    printf(c"  Class:                 %s\n", text);
+}
+
+fn print_endian(data: u8) void {
+    var text: &const u8 = switch data {
+        1 => c"little",
+        2 => c"big",
+        _ => c"unknown",
+    };
+    printf(c"  Data:                  %s endian\n", text);
+}
+
+fn print_osabi(osabi: u8) void {
+    var text: &const u8 = switch osabi {
+        0 => c"System V",
+        3 => c"Linux",
+        6 => c"Solaris",
+        9 => c"FreeBSD",
+        _ => c"other",
+    };
+    printf(c"  OS/ABI:                %s (%u)\n", text, osabi as u32);
+}
+
+fn print_elf_type(kind: u16) void {
+    var text: &const u8 = switch kind {
+        0 => c"NONE",
+        1 => c"REL",
+        2 => c"EXEC",
+        3 => c"DYN",
+        4 => c"CORE",
+        _ => c"other",
+    };
+    printf(c"  Type:                  %s (%u)\n", text, kind as u32);
+}
+
+fn print_machine(machine: u16) void {
+    var text: &const u8 = switch machine {
+        3 => c"x86",
+        8 => c"MIPS",
+        20 => c"PowerPC",
+        40 => c"ARM",
+        62 => c"x86-64",
+        183 => c"AArch64",
+        243 => c"RISC-V",
+        _ => c"other",
+    };
+    printf(c"  Machine:               %s (%u)\n", text, machine as u32);
+}
+
+extend ElfHeader {
+    // Read e_ident plus the ELF header. ELF32 and ELF64 place later fields at
+    // different offsets, but both are normalized into ElfHeader.
+    pub fn read(buf: &const [u8], class: u8, data: u8, little: bool) ElfHeader {
+        var header: ElfHeader = {
+            class: class,
+            data: data,
+            ident_version: buf[6],
+            osabi: buf[7],
+            little: little,
+            kind: read_u16(buf, 16, little),
+            machine: read_u16(buf, 18, little),
+            elf_version: read_u32(buf, 20, little),
+            entry: 0,
+            phoff: 0,
+            shoff: 0,
+            flags: 0,
+            ehsize: 0,
+            phentsize: 0,
+            phnum: 0,
+            shentsize: 0,
+            shnum: 0,
+            shstrndx: 0,
+        };
+
+        if class == ELFCLASS32 {
+            // ELF32 stores offsets and addresses as 32-bit words.
+            header.entry = read_u32(buf, 24, little) as u64;
+            header.phoff = read_u32(buf, 28, little) as u64;
+            header.shoff = read_u32(buf, 32, little) as u64;
+            header.flags = read_u32(buf, 36, little);
+            header.ehsize = read_u16(buf, 40, little);
+            header.phentsize = read_u16(buf, 42, little);
+            header.phnum = read_u16(buf, 44, little);
+            header.shentsize = read_u16(buf, 46, little);
+            header.shnum = read_u16(buf, 48, little);
+            header.shstrndx = read_u16(buf, 50, little);
+        } else {
+            // ELF64 widens the header and moves the section/program metadata.
+            header.entry = read_u64(buf, 24, little);
+            header.phoff = read_u64(buf, 32, little);
+            header.shoff = read_u64(buf, 40, little);
+            header.flags = read_u32(buf, 48, little);
+            header.ehsize = read_u16(buf, 52, little);
+            header.phentsize = read_u16(buf, 54, little);
+            header.phnum = read_u16(buf, 56, little);
+            header.shentsize = read_u16(buf, 58, little);
+            header.shnum = read_u16(buf, 60, little);
+            header.shstrndx = read_u16(buf, 62, little);
+        }
+
+        header
+    }
+
+    pub fn print(&const self) void {
+        printf(c"ELF header\n");
+        print_class(self.class);
+        print_endian(self.data);
+        printf(c"  Ident version:         %u\n", self.ident_version as u32);
+        print_osabi(self.osabi);
+        print_elf_type(self.kind);
+        print_machine(self.machine);
+        printf(c"  ELF version:           %u\n", self.elf_version);
+        printf(c"  Entry point:           0x%llx\n", self.entry);
+        printf(c"  Program header offset: %llu\n", self.phoff);
+        printf(c"  Section header offset: %llu\n", self.shoff);
+        printf(c"  Flags:                 0x%x\n", self.flags);
+        printf(c"  ELF header size:       %u\n", self.ehsize as u32);
+        printf(
+            c\\  Program headers:       %u entries, %u bytes each
+            \\
+            ,
+            self.phnum as u32,
+            self.phentsize as u32,
+        );
+        printf(
+            c\\  Section headers:       %u entries, %u bytes each
+            \\
+            ,
+            self.shnum as u32,
+            self.shentsize as u32,
+        );
+        printf(c"  Section name index:    %u\n", self.shstrndx as u32);
+    }
+}
+
+extend ProgramHeader {
+    // Program header layout also differs between ELF32 and ELF64. In ELF32,
+    // p_flags appears later; in ELF64 it is the second field.
+    pub fn read(buf: &const [u8], class: u8, off: usize, little: bool) ProgramHeader {
+        if class == ELFCLASS32 {
+            return {
+                kind: read_u32(buf, off, little),
+                flags: read_u32(buf, off + 24, little),
+                offset: read_u32(buf, off + 4, little) as u64,
+                vaddr: read_u32(buf, off + 8, little) as u64,
+                filesz: read_u32(buf, off + 16, little) as u64,
+                memsz: read_u32(buf, off + 20, little) as u64,
+                align: read_u32(buf, off + 28, little) as u64,
+            };
+        }
+
+        {
+            kind: read_u32(buf, off, little),
+            flags: read_u32(buf, off + 4, little),
+            offset: read_u64(buf, off + 8, little),
+            vaddr: read_u64(buf, off + 16, little),
+            filesz: read_u64(buf, off + 32, little),
+            memsz: read_u64(buf, off + 40, little),
+            align: read_u64(buf, off + 48, little),
+        }
+    }
+
+    pub fn name(&const self) &const u8 {
+        // Include common GNU OS-specific segment types because they show up in
+        // normal Linux binaries and are useful in summary output.
+        switch self.kind {
+            0 => c"NULL",
+            1 => c"LOAD",
+            2 => c"DYNAMIC",
+            3 => c"INTERP",
+            4 => c"NOTE",
+            5 => c"SHLIB",
+            6 => c"PHDR",
+            7 => c"TLS",
+            0x6474e550u32 => c"GNU_EH_FRAME",
+            0x6474e551u32 => c"GNU_STACK",
+            0x6474e552u32 => c"GNU_RELRO",
+            0x6474e553u32 => c"GNU_PROPERTY",
+            _ => c"other",
+        }
+    }
+
+    pub fn print_flags(&const self) void {
+        // Print fixed-width RWX columns so program and section output align.
+        printf(
+            c"%c%c%c",
+            if (self.flags & PF_R) != 0 { b'R' } else { b' ' } as u32,
+            if (self.flags & PF_W) != 0 { b'W' } else { b' ' } as u32,
+            if (self.flags & PF_X) != 0 { b'X' } else { b' ' } as u32,
+        );
+    }
+
+    pub fn print(&const self, index: u16) void {
+        printf(
+            c"  %-2u %-12s ",
+            index as u32,
+            self.name(),
+        );
+        self.print_flags();
+        printf(
+            c"  off=0x%08llx vaddr=0x%016llx filesz=0x%08llx"
+            c" memsz=0x%08llx align=0x%llx\n",
+            self.offset,
+            self.vaddr,
+            self.filesz,
+            self.memsz,
+            self.align,
+        );
+    }
+}

@@ -1,0 +1,139 @@
+import .c;
+import .command;
+import .elf;
+import .util;
+
+using c::*;
+using command::{Cli, DEFAULT_DUMP_LEN, DEFAULT_STRING_MIN, print_error_usage, print_help};
+using util::{looks_like_u64, parse_u64};
+
+// C stdio seek constants. Keep them as comptime values because they are ABI
+// constants, not mutable storage that needs an address.
+comptime SEEK_SET: i32 = 0;
+comptime SEEK_END: i32 = 2;
+
+// Read the whole file into one heap buffer, then hand a borrowed slice to the
+// ELF parser. The parser stores only slices and copied header records, so the
+// file buffer must stay alive for the whole inspection.
+fn inspect_path(cli: &const Cli) i32 {
+    var file = fopen(cli.path, c"rb");
+    if file as usize == 0 {
+        fprintf(stderr, c"error: cannot open %s\n", cli.path);
+        perror(cli.path);
+        return 1;
+    }
+    defer {
+        _ = fclose(file);
+    };
+
+    if fseek(file, 0, SEEK_END) != 0 {
+        fprintf(stderr, c"error: cannot seek %s\n", cli.path);
+        return 1;
+    }
+
+    var raw_size = ftell(file);
+    if raw_size < 0 {
+        fprintf(stderr, c"error: cannot determine file size\n");
+        return 1;
+    }
+
+    if fseek(file, 0, SEEK_SET) != 0 {
+        fprintf(stderr, c"error: cannot rewind %s\n", cli.path);
+        return 1;
+    }
+
+    // Do the cheap ident-size check before allocating or parsing more ELF
+    // structure. The full header-size validation happens in elf::inspect_bytes.
+    var size = raw_size as usize;
+    if size < 16 {
+        elf::print_small_ident_error();
+        return 1;
+    }
+
+    var mem = malloc(size);
+    if mem as usize == 0 {
+        fprintf(stderr, c"error: out of memory reading %llu bytes\n", size as u64);
+        return 1;
+    }
+    defer free(mem);
+
+    var got = fread(mem, 1usize, size, file);
+    if got != size {
+        fprintf(stderr, c"error: short read: wanted %llu bytes, got %llu\n", size as u64, got as u64);
+        return 1;
+    }
+
+    var bytes = mem as &u8;
+    elf::inspect_bytes(&const bytes[0..size], size, cli)
+}
+
+// Keep CLI parsing shallow: translate argv into a compact Cli value, then let
+// the inspection layer handle ELF-specific behavior.
+fn main(argc: i32, argv: &const &const u8) i32 {
+    if argc == 1 {
+        return print_help(argv[0]);
+    }
+
+    if argc == 2 {
+        if strcmp(argv[1], c"-h") == 0 or strcmp(argv[1], c"--help") == 0 or strcmp(argv[1], c"help") == 0 {
+            return print_help(argv[0]);
+        }
+    }
+
+    if argc > 5 {
+        return print_error_usage(argv[0], c"too many arguments");
+    }
+
+    if argc == 3 {
+        if strcmp(argv[2], c"dump") == 0 {
+            return print_error_usage(argv[0], c"dump requires a section name or @offset");
+        }
+
+        if strcmp(argv[2], c"strings") == 0 {
+            var cli = Cli::strings(argv[1], c".rodata", DEFAULT_STRING_MIN);
+            return inspect_path(&const cli);
+        }
+
+        if strcmp(argv[2], c"relocs") == 0 {
+            var cli = Cli::relocs(argv[1]);
+            return inspect_path(&const cli);
+        }
+
+        if !looks_like_u64(argv[2]) {
+            return print_error_usage(argv[0], c"unknown command or invalid address");
+        }
+
+        var cli = Cli::resolve(argv[1], parse_u64(argv[2]));
+        return inspect_path(&const cli);
+    }
+
+    if argc == 4 or argc == 5 {
+        if strcmp(argv[2], c"dump") == 0 {
+            var len = DEFAULT_DUMP_LEN;
+            if argc == 5 {
+                len = parse_u64(argv[4]);
+            }
+            var cli = Cli::dump(argv[1], argv[3], len);
+            return inspect_path(&const cli);
+        }
+
+        if strcmp(argv[2], c"strings") == 0 {
+            var section = argv[3];
+            var min_len = DEFAULT_STRING_MIN;
+            if argc == 5 {
+                min_len = parse_u64(argv[4]) as usize;
+            }
+            var cli = Cli::strings(argv[1], section, min_len);
+            return inspect_path(&const cli);
+        }
+
+        if strcmp(argv[2], c"relocs") == 0 {
+            return print_error_usage(argv[0], c"relocs does not take extra arguments");
+        }
+
+        return print_error_usage(argv[0], c"unknown command");
+    }
+
+    var cli = Cli::summary(argv[1]);
+    inspect_path(&const cli)
+}

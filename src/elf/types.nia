@@ -1,0 +1,219 @@
+// Shared ELF constants and compact in-memory records. The structs mirror only
+// the fields this tool prints or uses for lookup; unknown ELF fields are skipped
+// while reading rather than stored.
+
+pub comptime ELFCLASS32: u8 = 1;
+pub comptime ELFCLASS64: u8 = 2;
+
+pub comptime PT_LOAD: u32 = 1;
+
+pub comptime PF_X: u32 = 1;
+pub comptime PF_W: u32 = 2;
+pub comptime PF_R: u32 = 4;
+
+pub comptime SHF_WRITE: u64 = 1;
+pub comptime SHF_ALLOC: u64 = 2;
+pub comptime SHF_EXECINSTR: u64 = 4;
+
+pub comptime SHT_SYMTAB: u32 = 2;
+pub comptime SHT_STRTAB: u32 = 3;
+pub comptime SHT_RELA: u32 = 4;
+pub comptime SHT_REL: u32 = 9;
+pub comptime SHT_DYNSYM: u32 = 11;
+
+pub comptime STT_OBJECT: u8 = 1;
+pub comptime STT_FUNC: u8 = 2;
+
+// This tool keeps section headers in a fixed array inside ElfFile. 256 is enough
+// for the small inspection target here and keeps allocation strategy explicit.
+pub comptime MAX_SECTIONS: usize = 256;
+
+// Normalized ELF header. 32-bit files are widened into u64 offsets/addresses so
+// the rest of the code does not need separate ELF32 and ELF64 paths.
+pub struct ElfHeader {
+    class: u8,
+    data: u8,
+    ident_version: u8,
+    osabi: u8,
+    little: bool,
+    kind: u16,
+    machine: u16,
+    elf_version: u32,
+    entry: u64,
+    phoff: u64,
+    shoff: u64,
+    flags: u32,
+    ehsize: u16,
+    phentsize: u16,
+    phnum: u16,
+    shentsize: u16,
+    shnum: u16,
+    shstrndx: u16,
+}
+
+// Normalized program header used for printing and address-to-file-offset lookup.
+pub struct ProgramHeader {
+    kind: u32,
+    flags: u32,
+    offset: u64,
+    vaddr: u64,
+    filesz: u64,
+    memsz: u64,
+    align: u64,
+}
+
+// Normalized section header. Section names are offsets into the section-name
+// string table, not owned strings.
+pub struct SectionHeader {
+    name: u32,
+    kind: u32,
+    flags: u64,
+    addr: u64,
+    offset: u64,
+    size: u64,
+    link: u32,
+    info: u32,
+    addralign: u64,
+    entsize: u64,
+}
+
+// Minimal symbol table entry. The low nibble of info stores the symbol type.
+pub struct SymbolInfo {
+    name: u32,
+    value: u64,
+    size: u64,
+    info: u8,
+    shndx: u16,
+}
+
+// Minimal relocation entry. The packed info field is decoded differently for
+// ELF32 and ELF64, so helpers below take the ELF class.
+pub struct RelocationInfo {
+    offset: u64,
+    info: u64,
+    addend: u64,
+    rela: bool,
+}
+
+// Parsed ELF state that is worth keeping across commands. Section bytes and
+// names remain borrowed from the original file buffer.
+pub struct ElfFile {
+    header: ElfHeader,
+    sections: [256]SectionHeader,
+    section_count: u16,
+    shstrtab: &const [u8],
+    entry_section: i32,
+}
+
+// Return a C string inside an ELF string table. Invalid offsets degrade to an
+// empty string so truncated files do not make printing walk arbitrary memory.
+pub fn cstr_at(buf: &const [u8], off: u32) &const u8 {
+    if off as usize >= @len(buf) {
+        return c"";
+    }
+    return &const buf[off as usize];
+}
+
+extend ProgramHeader {
+    // LOAD segments describe what virtual address range comes from the file.
+    pub fn contains_addr(&const self, addr: u64) bool {
+        self.kind == PT_LOAD and addr >= self.vaddr and addr < self.vaddr + self.memsz
+    }
+
+    pub fn file_offset_for(&const self, addr: u64) u64 {
+        self.offset + (addr - self.vaddr)
+    }
+}
+
+extend SectionHeader {
+    // Empty section headers are used for fixed-array initialization and as
+    // out-parameters when a lookup may fail.
+    pub fn empty() SectionHeader {
+        {
+            name: 0,
+            kind: 0,
+            flags: 0,
+            addr: 0,
+            offset: 0,
+            size: 0,
+            link: 0,
+            info: 0,
+            addralign: 0,
+            entsize: 0,
+        }
+    }
+
+    pub fn contains_addr(&const self, addr: u64) bool {
+        (self.flags & SHF_ALLOC) != 0 and
+            self.addr != 0 and
+            addr >= self.addr and
+            addr < self.addr + self.size
+    }
+
+    pub fn is_symbol_table(&const self) bool {
+        self.kind == SHT_DYNSYM or self.kind == SHT_SYMTAB
+    }
+
+    pub fn is_relocation_table(&const self) bool {
+        self.kind == SHT_REL or self.kind == SHT_RELA
+    }
+}
+
+extend ElfFile {
+    // Keep the fixed section-array construction in the defining module. This is
+    // also the natural owner of ElfFile's storage policy.
+    pub fn empty(header: ElfHeader) ElfFile {
+        {
+            header: header,
+            sections: [SectionHeader::empty(); MAX_SECTIONS],
+            section_count: 0,
+            shstrtab: c"",
+            entry_section: -1,
+        }
+    }
+}
+
+extend SymbolInfo {
+    // ELF packs binding and type into st_info; this tool only cares about type.
+    pub fn kind(&const self) u8 {
+        self.info & 0x0fu8
+    }
+
+    pub fn kind_name(&const self) &const u8 {
+        switch self.kind() {
+            STT_OBJECT => c"OBJECT",
+            STT_FUNC => c"FUNC",
+            _ => c"OTHER",
+        }
+    }
+
+    pub fn printable(&const self) bool {
+        self.kind() == STT_FUNC or self.kind() == STT_OBJECT
+    }
+
+    pub fn contains_addr(&const self, addr: u64) bool {
+        self.value != 0 and self.size > 0 and addr >= self.value and addr < self.value + self.size
+    }
+
+    pub fn before_or_at(&const self, addr: u64) bool {
+        self.value != 0 and self.value <= addr
+    }
+}
+
+extend RelocationInfo {
+    // r_info packs relocation type and symbol index. ELF32 uses 8 low bits for
+    // type; ELF64 uses 32 low bits.
+    pub fn kind(&const self, class: u8) u32 {
+        if class == ELFCLASS32 {
+            return (self.info & 0xffu64) as u32;
+        }
+        (self.info & 0xffffffffu64) as u32
+    }
+
+    pub fn symbol_index(&const self, class: u8) u64 {
+        if class == ELFCLASS32 {
+            return self.info >> 8;
+        }
+        self.info >> 32
+    }
+}

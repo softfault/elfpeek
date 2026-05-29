@@ -1,0 +1,124 @@
+import .c;
+import .command;
+import .elf.header;
+import .elf.reloc;
+import .elf.section;
+import .elf.symbol;
+import .elf.types;
+
+using c::*;
+using command::{Cli, Mode};
+using types::*;
+
+// Public helper used by main before the full ELF parser is entered.
+pub fn print_small_ident_error() void {
+    printf(c"error: file is too small for an ELF ident\n");
+}
+
+// Program headers are read on demand instead of stored in ElfFile. They are
+// needed for summary output and address resolution, but keeping only sections
+// avoids a second fixed-size stack/struct array.
+fn print_program_headers(
+    buf: &const [u8],
+    size: usize,
+    class: u8,
+    little: bool,
+    phoff: u64,
+    phentsize: u16,
+    phnum: u16,
+) void {
+    if phoff > size as u64 {
+        return;
+    }
+
+    printf(c"\nProgram headers\n");
+    printf(
+        c"  #  Type         Flg  Offset     VirtAddr"
+        c"           FileSiz    MemSiz     Align\n"
+    );
+
+    for var i: u16 = 0; i < phnum; i += 1 {
+        var off64 = phoff + (i as u64 * phentsize as u64);
+        if off64 + phentsize as u64 > size as u64 {
+            printf(c"  %u  <truncated>\n", i as u32);
+            break;
+        }
+
+        var off = off64 as usize;
+        var ph = ProgramHeader::read(buf, class, off, little);
+        ph.print(i);
+    }
+}
+
+pub fn inspect_bytes(buf: &const [u8], size: usize, cli: &const Cli) i32 {
+    if size < 16 {
+        print_small_ident_error();
+        return 1;
+    }
+
+    // The first 16 bytes are e_ident. They decide whether this is ELF at all
+    // and which layout/endian readers the rest of the parser must use.
+    if buf[0] != 0x7fu8 or buf[1] != b'E' or buf[2] != b'L' or buf[3] != b'F' {
+        printf(c"error: not an ELF file\n");
+        return 1;
+    }
+
+    var class = buf[4];
+    var data = buf[5];
+    var little = data == 1;
+
+    // Only the standard little/big endian encodings are supported. Unknown
+    // values are rejected before any multi-byte fields are read.
+    if data != 1 and data != 2 {
+        printf(c"error: unsupported ELF data encoding %u\n", data as u32);
+        return 1;
+    }
+
+    var header_size: usize = 0;
+    if class == 1 {
+        header_size = 52;
+    } else {
+        if class == 2 {
+            header_size = 64;
+        } else {
+            printf(c"error: unsupported ELF class %u\n", class as u32);
+            return 1;
+        }
+    }
+
+    if size < header_size {
+        printf(c"error: file is too small for its ELF header\n");
+        return 1;
+    }
+
+    var header = ElfHeader::read(buf, class, data, little);
+    var elf = ElfFile::read(buf, header);
+
+    // Single-purpose subcommands return early so summary-only work is skipped.
+    switch cli.mode {
+        Mode::Dump => return elf.dump_target(buf, cli.arg, cli.value),
+        Mode::Strings => return elf.print_strings_from(buf, cli.arg, cli.min_len),
+        Mode::Relocs => return elf.print_relocations(buf),
+        _ => {},
+    }
+
+    header.print();
+    if header.phnum > 0 {
+        print_program_headers(
+            buf,
+            size,
+            header.class,
+            header.little,
+            header.phoff,
+            header.phentsize,
+            header.phnum,
+        );
+    }
+    elf.print_sections();
+    elf.print_symbols(buf);
+    if cli.mode == Mode::Resolve {
+        elf.resolve_addr(buf, cli.value);
+    }
+
+    0
+}

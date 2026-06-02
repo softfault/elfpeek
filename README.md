@@ -9,7 +9,7 @@ quick inspection commands without a REPL.
 ## Requirements
 
 This project is written in [Nia](https://github.com/nialang/nia). Build it with
-`niac`, the Nia compiler.
+`nia`, the Nia compiler.
 
 If you have Rust/Cargo installed, one way to install the compiler is:
 
@@ -33,9 +33,8 @@ cargo install --git https://github.com/nialang/nia nia-cli
 ## Build
 
 ```sh
-mkdir build
-niac check src/main.nia
-niac emit exe src/main.nia -o build/elfpeek
+nia check src/main.nia
+nia emit exe src/main.nia -o build/elfpeek
 ```
 
 ## Run

@@ -37,7 +37,8 @@ fn print_program_headers(
         c"           FileSiz    MemSiz     Align\n"
     );
 
-    for var i: u16 = 0; i < phnum; i += 1 {
+    var i: u16 = 0;
+    while i < phnum {
         var off64 = phoff + (i as u64 * phentsize as u64);
         if off64 + phentsize as u64 > size as u64 {
             printf(c"  %u  <truncated>\n", i as u32);
@@ -47,6 +48,7 @@ fn print_program_headers(
         var off = off64 as usize;
         var ph = ProgramHeader::read(buf, class, off, little);
         ph.print(i);
+        i += 1;
     }
 }
 

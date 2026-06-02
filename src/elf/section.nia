@@ -39,26 +39,26 @@ extend SectionHeader {
         }
     }
 
-    fn type_name(&const self) &const u8 {
+    fn print_type_name(&const self) void {
         // This is intentionally a display whitelist, not a full ELF registry.
         switch self.kind {
-            0 => c"NULL",
-            1 => c"PROGBITS",
-            2 => c"SYMTAB",
-            3 => c"STRTAB",
-            4 => c"RELA",
-            5 => c"HASH",
-            6 => c"DYNAMIC",
-            7 => c"NOTE",
-            8 => c"NOBITS",
-            9 => c"REL",
-            11 => c"DYNSYM",
-            14 => c"INIT_ARRAY",
-            15 => c"FINI_ARRAY",
-            0x6ffffff6u32 => c"GNU_HASH",
-            0x6fffffffu32 => c"VERSYM",
-            0x6ffffffeu32 => c"VERNEED",
-            _ => c"UNKNOWN",
+            0 => printf(c"NULL      "),
+            1 => printf(c"PROGBITS  "),
+            2 => printf(c"SYMTAB    "),
+            3 => printf(c"STRTAB    "),
+            4 => printf(c"RELA      "),
+            5 => printf(c"HASH      "),
+            6 => printf(c"DYNAMIC   "),
+            7 => printf(c"NOTE      "),
+            8 => printf(c"NOBITS    "),
+            9 => printf(c"REL       "),
+            11 => printf(c"DYNSYM    "),
+            14 => printf(c"INIT_ARRAY"),
+            15 => printf(c"FINI_ARRAY"),
+            0x6ffffff6u32 => printf(c"GNU_HASH  "),
+            0x6fffffffu32 => printf(c"VERSYM    "),
+            0x6ffffffeu32 => printf(c"VERNEED   "),
+            _ => printf(c"UNKNOWN   "),
         }
     }
 
@@ -72,7 +72,15 @@ extend SectionHeader {
     }
 
     pub fn print(&const self, index: u16, names: &const [u8], entry_section: i32) void {
-        printf(c"  %-2u %-18s %-10s ", index as u32, cstr_at(names, self.name), self.type_name());
+        printf(c"  %-2u ", index as u32);
+        var name: &const u8 = 0usize as &const u8;
+        if cstr_at(names, self.name, &name) {
+            printf(c"%-18s ", name);
+        } else {
+            printf(c"                   ");
+        }
+        self.print_type_name();
+        printf(c" ");
         self.print_flags();
         printf(
             c" addr=0x%016llx off=0x%08llx size=0x%llx",
@@ -91,7 +99,7 @@ extend ElfFile {
     // Build the reusable section index for the file. Program headers are read
     // on demand, but sections are used by nearly every command.
     pub fn read(buf: &const [u8], header: ElfHeader) ElfFile {
-        var file = ElfFile::empty(header);
+        var file = ElfFile::empty(header, &const buf[0..0]);
 
         // Clamp section count to the fixed storage capacity. This keeps memory
         // explicit and avoids allocating based on untrusted file metadata.
@@ -101,9 +109,9 @@ extend ElfFile {
         }
         file.section_count = count;
 
-        for var i: u16 = 0; i < count; i += 1 {
+        for i: u16 in 0..count {
             var off64 = header.shoff + (i as u64 * header.shentsize as u64);
-            if off64 + header.shentsize as u64 > @len(buf) as u64 {
+            if off64 + header.shentsize as u64 > buf.len() as u64 {
                 file.section_count = i;
                 break;
             }
@@ -115,7 +123,7 @@ extend ElfFile {
         // into the original file buffer; individual names are offsets into it.
         if header.shstrndx < file.section_count {
             var shstr = file.sections[header.shstrndx as usize];
-            if shstr.offset + shstr.size <= @len(buf) as u64 {
+            if shstr.offset + shstr.size <= buf.len() as u64 {
                 var start = shstr.offset as usize;
                 var end = (shstr.offset + shstr.size) as usize;
                 file.shstrtab = &const buf[start..end];
@@ -124,7 +132,7 @@ extend ElfFile {
 
         // Precompute the section containing the entry point so summary output
         // can mark it without repeating the address scan.
-        for var i: u16 = 0; i < file.section_count; i += 1 {
+        for i: u16 in 0..file.section_count {
             if file.sections[i as usize].contains_addr(header.entry) {
                 file.entry_section = i as i32;
                 break;
@@ -142,7 +150,7 @@ extend ElfFile {
 
         printf(c"\nSections\n");
         printf(c"  #  Name               Type       Flg Address            Offset     Size\n");
-        for var i: u16 = 0; i < self.section_count; i += 1 {
+        for i: u16 in 0..self.section_count {
             self.sections[i as usize].print(i, self.shstrtab, self.entry_section);
         }
     }
@@ -150,16 +158,19 @@ extend ElfFile {
     pub fn section_bytes(&const self, buf: &const [u8], section: &const SectionHeader) &const [u8] {
         // NOBITS sections such as .bss may not have backing file bytes. Any
         // invalid range is treated as an empty slice for callers to reject.
-        if section.offset + section.size > @len(buf) as u64 {
-            return c"";
+        if section.offset + section.size > buf.len() as u64 {
+            return &const buf[0..0];
         }
-        return &const buf[section.offset as usize..(section.offset + section.size) as usize];
+        var start = section.offset as usize;
+        var end = (section.offset + section.size) as usize;
+        return &const buf[start..end];
     }
 
     pub fn find_section(&const self, name: &const u8, out: &SectionHeader) bool {
         // Use an out-parameter so callers can stay allocation-free.
-        for var i: u16 = 0; i < self.section_count; i += 1 {
-            if strcmp(cstr_at(self.shstrtab, self.sections[i as usize].name), name) == 0 {
+        for i: u16 in 0..self.section_count {
+            var section_name: &const u8 = 0usize as &const u8;
+            if cstr_at(self.shstrtab, self.sections[i as usize].name, &section_name) and strcmp(section_name, name) == 0 {
                 out.* = self.sections[i as usize];
                 return true;
             }
@@ -168,23 +179,24 @@ extend ElfFile {
     }
 
     pub fn dump_range(&const self, buf: &const [u8], offset: u64, wanted_len: u64) i32 {
-        if offset >= @len(buf) as u64 {
+        if offset >= buf.len() as u64 {
             printf(c"error: offset out of bounds\n");
             return 1;
         }
 
         var len = wanted_len;
-        if offset + len > @len(buf) as u64 {
-            len = @len(buf) as u64 - offset;
+        if offset + len > buf.len() as u64 {
+            len = buf.len() as u64 - offset;
         }
 
         // Produce a classic 16-byte hex row with an ASCII gutter.
         printf(c"\nDump\n");
-        for var row: u64 = 0; row < len; row += 16 {
+        var row: u64 = 0;
+        while row < len {
             var base = offset + row;
             printf(c"  %08llx  ", base);
 
-            for var col: u64 = 0; col < 16; col += 1 {
+            for col: u64 in 0..16 {
                 var pos = row + col;
                 if pos < len {
                     printf(c"%02x ", buf[(offset + pos) as usize] as u32);
@@ -197,13 +209,14 @@ extend ElfFile {
             }
 
             printf(c" |");
-            for var col: u64 = 0; col < 16; col += 1 {
+            for col: u64 in 0..16u64 {
                 var pos = row + col;
                 if pos < len {
                     print_byte_ascii(buf[(offset + pos) as usize]);
                 }
             }
             printf(c"|\n");
+            row += 16;
         }
 
         0
@@ -237,7 +250,7 @@ extend ElfFile {
         }
 
         var bytes = self.section_bytes(buf, &const section);
-        if @len(bytes) == 0 {
+        if bytes.len() == 0 {
             printf(c"error: section '%s' is empty or outside the file\n", section_name);
             return 1;
         }
@@ -250,7 +263,7 @@ extend ElfFile {
 
         // Scan runs of printable bytes. This intentionally does not require a
         // trailing NUL, which makes it useful for arbitrary data sections too.
-        for var i: usize = 0; i < @len(bytes); i += 1 {
+        for i: usize in 0..bytes.len() {
             if is_printable_byte(bytes[i]) {
                 if !in_string {
                     start = i;
@@ -271,10 +284,10 @@ extend ElfFile {
         }
 
         if in_string {
-            var len = @len(bytes) - start;
+            var len = bytes.len() - start;
             if len >= min_len {
                 printf(c"  %08llx  ", section.offset + start as u64);
-                print_string_bytes(bytes, start, @len(bytes));
+                print_string_bytes(bytes, start, bytes.len());
                 printf(c"\n");
                 count += 1;
             }

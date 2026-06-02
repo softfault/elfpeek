@@ -45,7 +45,7 @@ extend ElfFile {
     pub fn print_relocations(&const self, buf: &const [u8]) i32 {
         var found = false;
 
-        for var i: u16 = 0; i < self.section_count; i += 1 {
+        for i: u16 in 0..self.section_count {
             var relsec = self.sections[i as usize];
             if !relsec.is_relocation_table() {
                 continue;
@@ -62,7 +62,7 @@ extend ElfFile {
                     if rela { 24 } else { 16 }
                 };
             }
-            if entsize == 0 or relsec.offset + relsec.size > @len(buf) as u64 {
+            if entsize == 0 or relsec.offset + relsec.size > buf.len() as u64 {
                 continue;
             }
 
@@ -80,12 +80,14 @@ extend ElfFile {
                 continue;
             }
 
-            printf(c"\nRelocations from %s (%llu entries)\n", cstr_at(self.shstrtab, relsec.name), count);
+            printf(c"\nRelocations from ");
+            print_cstr_at(self.shstrtab, relsec.name);
+            printf(c" (%llu entries)\n", count);
             found = true;
 
-            for var j: u64 = 0; j < count; j += 1 {
+            for j: u64 in 0..count {
                 var off64 = relsec.offset + (j * entsize);
-                if off64 + entsize > @len(buf) as u64 {
+                if off64 + entsize > buf.len() as u64 {
                     break;
                 }
 
@@ -107,8 +109,8 @@ extend ElfFile {
                     printf(c"  addend=%lld", rel.addend);
                 }
                 if has_symtab {
-                    var name = self.symbol_name_at(buf, &const symtab, sym_index);
-                    if name[0] != 0u8 {
+                    var name: &const u8 = 0usize as &const u8;
+                    if self.symbol_name_at(buf, &const symtab, sym_index, &name) and name[0] != 0u8 {
                         printf(c"  %s", name);
                     }
                 }

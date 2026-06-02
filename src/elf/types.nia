@@ -1,3 +1,7 @@
+import ..c;
+
+using c::*;
+
 // Shared ELF constants and compact in-memory records. The structs mirror only
 // the fields this tool prints or uses for lookup; unknown ELF fields are skipped
 // while reading rather than stored.
@@ -105,13 +109,19 @@ pub struct ElfFile {
     entry_section: i32,
 }
 
-// Return a C string inside an ELF string table. Invalid offsets degrade to an
-// empty string so truncated files do not make printing walk arbitrary memory.
-pub fn cstr_at(buf: &const [u8], off: u32) &const u8 {
-    if off as usize >= @len(buf) {
-        return c"";
+pub fn cstr_at(buf: &const [u8], off: u32, out: &&const u8) bool {
+    if off as usize >= buf.len() {
+        return false;
     }
-    return &const buf[off as usize];
+    out.* = &const buf[off as usize];
+    true
+}
+
+pub fn print_cstr_at(buf: &const [u8], off: u32) void {
+    var text: &const u8 = 0usize as &const u8;
+    if cstr_at(buf, off, &text) {
+        printf(c"%s", text);
+    }
 }
 
 extend ProgramHeader {
@@ -162,12 +172,12 @@ extend SectionHeader {
 extend ElfFile {
     // Keep the fixed section-array construction in the defining module. This is
     // also the natural owner of ElfFile's storage policy.
-    pub fn empty(header: ElfHeader) ElfFile {
+    pub fn empty(header: ElfHeader, empty: &const [u8]) ElfFile {
         {
             header: header,
             sections: [SectionHeader::empty(); MAX_SECTIONS],
             section_count: 0,
-            shstrtab: c"",
+            shstrtab: empty,
             entry_section: -1,
         }
     }
@@ -179,11 +189,19 @@ extend SymbolInfo {
         self.info & 0x0fu8
     }
 
-    pub fn kind_name(&const self) &const u8 {
+    pub fn print_kind_name(&const self) void {
         switch self.kind() {
-            STT_OBJECT => c"OBJECT",
-            STT_FUNC => c"FUNC",
-            _ => c"OTHER",
+            STT_OBJECT => printf(c"OBJECT"),
+            STT_FUNC => printf(c"FUNC  "),
+            _ => printf(c"OTHER "),
+        }
+    }
+
+    pub fn print_kind_name_from(kind: u8) void {
+        switch kind {
+            STT_OBJECT => printf(c"OBJECT"),
+            STT_FUNC => printf(c"FUNC"),
+            _ => printf(c"OTHER"),
         }
     }
 

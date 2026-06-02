@@ -93,7 +93,7 @@ pub fn print_byte_ascii(ch: u8) void {
 }
 
 pub fn print_string_bytes(buf: &const [u8], start: usize, end: usize) void {
-    for var i = start; i < end; i += 1 {
+    for i in start..end {
         _ = c::putchar(buf[i] as i32);
     }
 }

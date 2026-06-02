@@ -175,23 +175,23 @@ extend ProgramHeader {
         }
     }
 
-    pub fn name(&const self) &const u8 {
+    pub fn print_name(&const self) void {
         // Include common GNU OS-specific segment types because they show up in
         // normal Linux binaries and are useful in summary output.
         switch self.kind {
-            0 => c"NULL",
-            1 => c"LOAD",
-            2 => c"DYNAMIC",
-            3 => c"INTERP",
-            4 => c"NOTE",
-            5 => c"SHLIB",
-            6 => c"PHDR",
-            7 => c"TLS",
-            0x6474e550u32 => c"GNU_EH_FRAME",
-            0x6474e551u32 => c"GNU_STACK",
-            0x6474e552u32 => c"GNU_RELRO",
-            0x6474e553u32 => c"GNU_PROPERTY",
-            _ => c"other",
+            0 => printf(c"NULL        "),
+            1 => printf(c"LOAD        "),
+            2 => printf(c"DYNAMIC     "),
+            3 => printf(c"INTERP      "),
+            4 => printf(c"NOTE        "),
+            5 => printf(c"SHLIB       "),
+            6 => printf(c"PHDR        "),
+            7 => printf(c"TLS         "),
+            0x6474e550u32 => printf(c"GNU_EH_FRAME"),
+            0x6474e551u32 => printf(c"GNU_STACK   "),
+            0x6474e552u32 => printf(c"GNU_RELRO   "),
+            0x6474e553u32 => printf(c"GNU_PROPERTY"),
+            _ => printf(c"other       "),
         }
     }
 
@@ -206,11 +206,9 @@ extend ProgramHeader {
     }
 
     pub fn print(&const self, index: u16) void {
-        printf(
-            c"  %-2u %-12s ",
-            index as u32,
-            self.name(),
-        );
+        printf(c"  %-2u ", index as u32);
+        self.print_name();
+        printf(c" ");
         self.print_flags();
         printf(
             c"  off=0x%08llx vaddr=0x%016llx filesz=0x%08llx"

@@ -1,4 +1,4 @@
-# elfpeek-nia
+# elfpeek
 
 `elfpeek` is a small ELF inspection tool written in Nia.
 

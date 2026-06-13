@@ -1,0 +1,86 @@
+using std::CStr;
+using std::fmt;
+using std::fs;
+using std::io;
+using std::os;
+using std::process;
+
+pub struct Output {
+    stdout: io::FileWriter,
+    stderr: io::FileWriter,
+}
+
+extend Output {
+    pub fn init(
+        runtime_io: &mut io::Io[Error = os::Error],
+        stdout_buffer: &mut [u8],
+        stderr_buffer: &mut [u8],
+    ) Output {
+        {
+            stdout: io::FileWriter::stdout(runtime_io, stdout_buffer),
+            stderr: io::FileWriter::stderr(runtime_io, stderr_buffer),
+        }
+    }
+
+    pub fn flush(&mut self) process::ExitCode!void {
+        self.stdout.flush().exit().?;
+        self.stderr.flush().exit().?;
+        !{}
+    }
+
+    pub fn write(&mut self, bytes: &[u8]) process::ExitCode!void {
+        self.stdout.write_all(bytes).exit().?;
+        !{}
+    }
+
+    pub fn err(&mut self, bytes: &[u8]) process::ExitCode!void {
+        self.stderr.write_all(bytes).exit().?;
+        !{}
+    }
+
+    pub fn print(&mut self, template: &[char], args: &[&fmt::Format]) process::ExitCode!void {
+        self.stdout.print(template, args).exit().?;
+        !{}
+    }
+
+    pub fn err_print(&mut self, template: &[char], args: &[&fmt::Format]) process::ExitCode!void {
+        self.stderr.print(template, args).exit().?;
+        !{}
+    }
+
+    pub fn byte(&mut self, byte: u8) process::ExitCode!void {
+        self.stdout.write_byte(byte).exit().?;
+        !{}
+    }
+
+    pub fn err_byte(&mut self, byte: u8) process::ExitCode!void {
+        self.stderr.write_byte(byte).exit().?;
+        !{}
+    }
+
+    pub fn spaces(&mut self, count: usize) process::ExitCode!void {
+        var i: usize = 0;
+        while i < count {
+            self.byte(b' ').?;
+            i += 1;
+        }
+        !{}
+    }
+
+    pub fn err_spaces(&mut self, count: usize) process::ExitCode!void {
+        var i: usize = 0;
+        while i < count {
+            self.err_byte(b' ').?;
+            i += 1;
+        }
+        !{}
+    }
+
+    pub fn cstr(&mut self, text: CStr) process::ExitCode!void {
+        self.print("{}", [&text])
+    }
+
+    pub fn err_cstr(&mut self, text: CStr) process::ExitCode!void {
+        self.err_print("{}", [&text])
+    }
+}

@@ -1,7 +1,9 @@
-import .c;
+using std::CStr;
+using std::process;
+using root::output::Output;
 
-pub comptime DEFAULT_DUMP_LEN: u64 = 256;
-pub comptime DEFAULT_STRING_MIN: usize = 4;
+pub comptime let DEFAULT_DUMP_LEN: u64 = 256;
+pub comptime let DEFAULT_STRING_MIN: usize = 4;
 
 // The CLI is command-shaped, but the rest of the program only needs this small
 // mode enum plus a few optional values.
@@ -15,117 +17,101 @@ pub enum Mode: u8 {
 
 pub struct Cli {
     mode: Mode,
-    path: &const u8,
-    arg: &const u8,
+    path: CStr,
+    arg: CStr,
     value: u64,
     min_len: usize,
 }
 
-fn print_command_lines(prog: &const u8) void {
-    c::printf(
-        c\\  %s <elf-file>
-        \\  %s <elf-file> 0xaddr
-        \\  %s <elf-file> dump <.section|@offset> [len]
-        \\  %s <elf-file> strings [.section] [min-len]
-        \\  %s <elf-file> relocs
-        \\
-        ,
-        prog,
-        prog,
-        prog,
-        prog,
-        prog,
-    );
+fn print_command_lines(out: &mut Output, prog: CStr) process::ExitCode!void {
+    out.write(b"  ").?;
+    out.cstr(prog).?;
+    out.write(b" <elf-file>\n  ").?;
+    out.cstr(prog).?;
+    out.write(b" <elf-file> 0xaddr\n  ").?;
+    out.cstr(prog).?;
+    out.write(b" <elf-file> dump <.section|@offset> [len]\n  ").?;
+    out.cstr(prog).?;
+    out.write(b" <elf-file> strings [.section] [min-len]\n  ").?;
+    out.cstr(prog).?;
+    out.write(b" <elf-file> relocs\n").?;
+    !{}
 }
 
-fn print_command_lines_stderr(prog: &const u8) void {
-    c::fprintf(
-        c::stderr,
-        c\\  %s <elf-file>
-        \\  %s <elf-file> 0xaddr
-        \\  %s <elf-file> dump <.section|@offset> [len]
-        \\  %s <elf-file> strings [.section] [min-len]
-        \\  %s <elf-file> relocs
-        \\
-        ,
-        prog,
-        prog,
-        prog,
-        prog,
-        prog,
-    );
+fn print_command_lines_stderr(out: &mut Output, prog: CStr) process::ExitCode!void {
+    out.err(b"  ").?;
+    out.err_cstr(prog).?;
+    out.err(b" <elf-file>\n  ").?;
+    out.err_cstr(prog).?;
+    out.err(b" <elf-file> 0xaddr\n  ").?;
+    out.err_cstr(prog).?;
+    out.err(b" <elf-file> dump <.section|@offset> [len]\n  ").?;
+    out.err_cstr(prog).?;
+    out.err(b" <elf-file> strings [.section] [min-len]\n  ").?;
+    out.err_cstr(prog).?;
+    out.err(b" <elf-file> relocs\n").?;
+    !{}
 }
 
 // The full help is shown for no arguments and explicit help requests.
-pub fn print_help(prog: &const u8) i32 {
-    c::printf(
-        c\\elfpeek - inspect ELF headers, sections, symbols, and relocations
-        \\
-        \\Usage:
-        \\
-    );
-    print_command_lines(prog);
-    c::printf(
-        c\\
-        \\Commands:
-        \\  summary                 Show headers, sections, and symbols
-        \\  0xaddr                  Resolve a virtual address
-        \\  dump .text 64           Dump bytes from a section
-        \\  dump @0x1000 64         Dump bytes from a raw file offset
-        \\  strings .rodata 4       Print printable strings from a section
-        \\  relocs                  Print relocation entries
-        \\
-        \\Defaults:
-        \\  dump length             %llu bytes
-        \\  strings section         .rodata
-        \\  strings min length      %llu bytes
-        \\
-        ,
-        DEFAULT_DUMP_LEN,
-        DEFAULT_STRING_MIN as u64,
-    );
-    0
+pub fn print_help(out: &mut Output, prog: CStr) process::ExitCode!i32 {
+    out.write(b"elfpeek - inspect ELF headers, sections, symbols, and relocations\n\nUsage:\n").?;
+    print_command_lines(out, prog).?;
+    out.write(
+        b"\nCommands:\n  summary                 Show headers, sections, and symbols\n  0xaddr                  Resolve a virtual address\n  dump .text 64           Dump bytes from a section\n  dump @0x1000 64         Dump bytes from a raw file offset\n  strings .rodata 4       Print printable strings from a section\n  relocs                  Print relocation entries\n\nDefaults:\n  dump length             "
+    ).?;
+    out.print("{}", [&DEFAULT_DUMP_LEN]).?;
+    out.write(b" bytes\n  strings section         .rodata\n  strings min length      ").?;
+    out.print("{}", [&DEFAULT_STRING_MIN]).?;
+    out.write(b" bytes\n").?;
+    !0
 }
 
-pub fn print_error_usage(prog: &const u8, message: &const u8) i32 {
-    c::fprintf(c::stderr, c"error: %s\n\nUsage:\n", message);
-    print_command_lines_stderr(prog);
-    c::fprintf(c::stderr, c"\nRun '%s --help' for examples.\n", prog);
-    2
+pub fn print_error_usage(out: &mut Output, prog: CStr, message: &[u8]) process::ExitCode!i32 {
+    out.err(b"error: ").?;
+    out.err(message).?;
+    out.err(b"\n\nUsage:\n").?;
+    print_command_lines_stderr(out, prog).?;
+    out.err(b"\nRun '").?;
+    out.err_cstr(prog).?;
+    out.err(b" --help' for examples.\n").?;
+    !2
 }
 
 // Kept as a short compatibility wrapper for existing call sites.
-pub fn print_usage(prog: &const u8) i32 {
-    c::printf(c"Usage:\n");
-    print_command_lines(prog);
-    c::printf(c"\nRun '%s --help' for examples.\n", prog);
-    2
+pub fn print_usage(out: &mut Output, prog: CStr) process::ExitCode!i32 {
+    out.write(b"Usage:\n").?;
+    print_command_lines(out, prog).?;
+    out.write(b"\nRun '").?;
+    out.cstr(prog).?;
+    out.write(b" --help' for examples.\n").?;
+    !2
 }
 
 extend Cli {
     // Associated constructors make the call sites state the intended command
     // instead of filling unrelated fields by hand.
-    pub fn summary(path: &const u8) Cli {
+    pub fn summary(path: CStr) Cli {
         {
             mode: Mode::Summary,
             path: path,
-            arg: c"",
+            arg: CStr::from_ptr(c""),
             value: 0,
             min_len: DEFAULT_STRING_MIN,
         }
     }
 
-    pub fn resolve(path: &const u8, addr: u64) Cli {
+    pub fn resolve(path: CStr, addr: u64) Cli {
         {
             mode: Mode::Resolve,
             path: path,
-            arg: c"",
+            arg: CStr::from_ptr(c""),
             value: addr,
             min_len: DEFAULT_STRING_MIN,
         }
     }
 
-    pub fn dump(path: &const u8, target: &const u8, len: u64) Cli {
+    pub fn dump(path: CStr, target: CStr, len: u64) Cli {
         {
             mode: Mode::Dump,
             path: path,
@@ -135,7 +121,7 @@ extend Cli {
         }
     }
 
-    pub fn strings(path: &const u8, section: &const u8, min_len: usize) Cli {
+    pub fn strings(path: CStr, section: CStr, min_len: usize) Cli {
         {
             mode: Mode::Strings,
             path: path,
@@ -145,11 +131,11 @@ extend Cli {
         }
     }
 
-    pub fn relocs(path: &const u8) Cli {
+    pub fn relocs(path: CStr) Cli {
         {
             mode: Mode::Relocs,
             path: path,
-            arg: c"",
+            arg: CStr::from_ptr(c""),
             value: 0,
             min_len: DEFAULT_STRING_MIN,
         }

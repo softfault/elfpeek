@@ -1,71 +1,89 @@
-import ..c;
-import ..util;
-import .types;
-
-using c::*;
-using types::*;
-using util::*;
+using std::CStr;
+using std::fmt;
+using std::process;
+using root::output::Output;
+using root::util::*;
+using super::types::*;
 
 // Small name mappers keep printing code readable without introducing storage.
-fn print_class(class: u8) void {
-    var text: &const u8 = switch class {
-        1 => c"ELF32",
-        2 => c"ELF64",
-        _ => c"unknown",
+fn print_class(out: &mut Output, class: u8) process::ExitCode!void {
+    var text = switch class {
+        1 => CStr::from_ptr(c"ELF32"),
+        2 => CStr::from_ptr(c"ELF64"),
+        _ => CStr::from_ptr(c"unknown"),
     };
-    printf(c"  Class:                 %s\n", text);
+    out.write(b"  Class:                 ").?;
+    out.cstr(text).?;
+    out.write(b"\n").?;
+    !{}
 }
 
-fn print_endian(data: u8) void {
-    var text: &const u8 = switch data {
-        1 => c"little",
-        2 => c"big",
-        _ => c"unknown",
+fn print_endian(out: &mut Output, data: u8) process::ExitCode!void {
+    var text = switch data {
+        1 => CStr::from_ptr(c"little"),
+        2 => CStr::from_ptr(c"big"),
+        _ => CStr::from_ptr(c"unknown"),
     };
-    printf(c"  Data:                  %s endian\n", text);
+    out.write(b"  Data:                  ").?;
+    out.cstr(text).?;
+    out.write(b" endian\n").?;
+    !{}
 }
 
-fn print_osabi(osabi: u8) void {
-    var text: &const u8 = switch osabi {
-        0 => c"System V",
-        3 => c"Linux",
-        6 => c"Solaris",
-        9 => c"FreeBSD",
-        _ => c"other",
+fn print_osabi(out: &mut Output, osabi: u8) process::ExitCode!void {
+    var text = switch osabi {
+        0 => CStr::from_ptr(c"System V"),
+        3 => CStr::from_ptr(c"Linux"),
+        6 => CStr::from_ptr(c"Solaris"),
+        9 => CStr::from_ptr(c"FreeBSD"),
+        _ => CStr::from_ptr(c"other"),
     };
-    printf(c"  OS/ABI:                %s (%u)\n", text, osabi as u32);
+    out.write(b"  OS/ABI:                ").?;
+    out.cstr(text).?;
+    out.write(b" (").?;
+    let osabi_value = osabi as u32;
+    out.print("{})\n", [&osabi_value]).?;
+    !{}
 }
 
-fn print_elf_type(kind: u16) void {
-    var text: &const u8 = switch kind {
-        0 => c"NONE",
-        1 => c"REL",
-        2 => c"EXEC",
-        3 => c"DYN",
-        4 => c"CORE",
-        _ => c"other",
+fn print_elf_type(out: &mut Output, kind: u16) process::ExitCode!void {
+    var text = switch kind {
+        0 => CStr::from_ptr(c"NONE"),
+        1 => CStr::from_ptr(c"REL"),
+        2 => CStr::from_ptr(c"EXEC"),
+        3 => CStr::from_ptr(c"DYN"),
+        4 => CStr::from_ptr(c"CORE"),
+        _ => CStr::from_ptr(c"other"),
     };
-    printf(c"  Type:                  %s (%u)\n", text, kind as u32);
+    out.write(b"  Type:                  ").?;
+    out.cstr(text).?;
+    out.write(b" (").?;
+    out.print("{})\n", [&kind]).?;
+    !{}
 }
 
-fn print_machine(machine: u16) void {
-    var text: &const u8 = switch machine {
-        3 => c"x86",
-        8 => c"MIPS",
-        20 => c"PowerPC",
-        40 => c"ARM",
-        62 => c"x86-64",
-        183 => c"AArch64",
-        243 => c"RISC-V",
-        _ => c"other",
+fn print_machine(out: &mut Output, machine: u16) process::ExitCode!void {
+    var text = switch machine {
+        3 => CStr::from_ptr(c"x86"),
+        8 => CStr::from_ptr(c"MIPS"),
+        20 => CStr::from_ptr(c"PowerPC"),
+        40 => CStr::from_ptr(c"ARM"),
+        62 => CStr::from_ptr(c"x86-64"),
+        183 => CStr::from_ptr(c"AArch64"),
+        243 => CStr::from_ptr(c"RISC-V"),
+        _ => CStr::from_ptr(c"other"),
     };
-    printf(c"  Machine:               %s (%u)\n", text, machine as u32);
+    out.write(b"  Machine:               ").?;
+    out.cstr(text).?;
+    out.write(b" (").?;
+    out.print("{})\n", [&machine]).?;
+    !{}
 }
 
 extend ElfHeader {
     // Read e_ident plus the ELF header. ELF32 and ELF64 place later fields at
     // different offsets, but both are normalized into ElfHeader.
-    pub fn read(buf: &const [u8], class: u8, data: u8, little: bool) ElfHeader {
+    pub fn read(buf: &[u8], class: u8, data: u8, little: bool) ElfHeader {
         var header: ElfHeader = {
             class: class,
             data: data,
@@ -116,42 +134,38 @@ extend ElfHeader {
         header
     }
 
-    pub fn print(&const self) void {
-        printf(c"ELF header\n");
-        print_class(self.class);
-        print_endian(self.data);
-        printf(c"  Ident version:         %u\n", self.ident_version as u32);
-        print_osabi(self.osabi);
-        print_elf_type(self.kind);
-        print_machine(self.machine);
-        printf(c"  ELF version:           %u\n", self.elf_version);
-        printf(c"  Entry point:           0x%llx\n", self.entry);
-        printf(c"  Program header offset: %llu\n", self.phoff);
-        printf(c"  Section header offset: %llu\n", self.shoff);
-        printf(c"  Flags:                 0x%x\n", self.flags);
-        printf(c"  ELF header size:       %u\n", self.ehsize as u32);
-        printf(
-            c\\  Program headers:       %u entries, %u bytes each
-            \\
-            ,
-            self.phnum as u32,
-            self.phentsize as u32,
-        );
-        printf(
-            c\\  Section headers:       %u entries, %u bytes each
-            \\
-            ,
-            self.shnum as u32,
-            self.shentsize as u32,
-        );
-        printf(c"  Section name index:    %u\n", self.shstrndx as u32);
+    pub fn print(&self, out: &mut Output) process::ExitCode!void {
+        out.write(b"ELF header\n").?;
+        print_class(out, self.class).?;
+        print_endian(out, self.data).?;
+        out.write(b"  Ident version:         ").?;
+        let ident_version = self.ident_version as u32;
+        out.print("{}\n", [&ident_version]).?;
+        print_osabi(out, self.osabi).?;
+        print_elf_type(out, self.kind).?;
+        print_machine(out, self.machine).?;
+        out.write(b"  ELF version:           ").?;
+        out.print("{}\n  Entry point:           0x{:x}\n  Program header offset: {}\n  Section header offset: {}\n  Flags:                 0x{:x}\n  ELF header size:       {}\n  Program headers:       {} entries, {} bytes each\n  Section headers:       {} entries, {} bytes each\n  Section name index:    {}\n", [
+            &self.elf_version,
+            &self.entry,
+            &self.phoff,
+            &self.shoff,
+            &self.flags,
+            &self.ehsize,
+            &self.phnum,
+            &self.phentsize,
+            &self.shnum,
+            &self.shentsize,
+            &self.shstrndx,
+        ]).?;
+        !{}
     }
 }
 
 extend ProgramHeader {
     // Program header layout also differs between ELF32 and ELF64. In ELF32,
     // p_flags appears later; in ELF64 it is the second field.
-    pub fn read(buf: &const [u8], class: u8, off: usize, little: bool) ProgramHeader {
+    pub fn read(buf: &[u8], class: u8, off: usize, little: bool) ProgramHeader {
         if class == ELFCLASS32 {
             return {
                 kind: read_u32(buf, off, little),
@@ -175,49 +189,48 @@ extend ProgramHeader {
         }
     }
 
-    pub fn print_name(&const self) void {
+    pub fn print_name(&self, out: &mut Output) process::ExitCode!void {
         // Include common GNU OS-specific segment types because they show up in
         // normal Linux binaries and are useful in summary output.
         switch self.kind {
-            0 => printf(c"NULL        "),
-            1 => printf(c"LOAD        "),
-            2 => printf(c"DYNAMIC     "),
-            3 => printf(c"INTERP      "),
-            4 => printf(c"NOTE        "),
-            5 => printf(c"SHLIB       "),
-            6 => printf(c"PHDR        "),
-            7 => printf(c"TLS         "),
-            0x6474e550u32 => printf(c"GNU_EH_FRAME"),
-            0x6474e551u32 => printf(c"GNU_STACK   "),
-            0x6474e552u32 => printf(c"GNU_RELRO   "),
-            0x6474e553u32 => printf(c"GNU_PROPERTY"),
-            _ => printf(c"other       "),
-        }
+            0 => out.write(b"NULL        "),
+            1 => out.write(b"LOAD        "),
+            2 => out.write(b"DYNAMIC     "),
+            3 => out.write(b"INTERP      "),
+            4 => out.write(b"NOTE        "),
+            5 => out.write(b"SHLIB       "),
+            6 => out.write(b"PHDR        "),
+            7 => out.write(b"TLS         "),
+            0x6474e550 => out.write(b"GNU_EH_FRAME"),
+            0x6474e551 => out.write(b"GNU_STACK   "),
+            0x6474e552 => out.write(b"GNU_RELRO   "),
+            0x6474e553 => out.write(b"GNU_PROPERTY"),
+            _ => out.write(b"other       "),
+        }.?;
+        !{}
     }
 
-    pub fn print_flags(&const self) void {
+    pub fn print_flags(&self, out: &mut Output) process::ExitCode!void {
         // Print fixed-width RWX columns so program and section output align.
-        printf(
-            c"%c%c%c",
-            if (self.flags & PF_R) != 0 { b'R' } else { b' ' } as u32,
-            if (self.flags & PF_W) != 0 { b'W' } else { b' ' } as u32,
-            if (self.flags & PF_X) != 0 { b'X' } else { b' ' } as u32,
-        );
+        out.byte(if (self.flags & PF_R) != 0 { b'R' } else { b' ' }).?;
+        out.byte(if (self.flags & PF_W) != 0 { b'W' } else { b' ' }).?;
+        out.byte(if (self.flags & PF_X) != 0 { b'X' } else { b' ' }).?;
+        !{}
     }
 
-    pub fn print(&const self, index: u16) void {
-        printf(c"  %-2u ", index as u32);
-        self.print_name();
-        printf(c" ");
-        self.print_flags();
-        printf(
-            c"  off=0x%08llx vaddr=0x%016llx filesz=0x%08llx"
-            c" memsz=0x%08llx align=0x%llx\n",
-            self.offset,
-            self.vaddr,
-            self.filesz,
-            self.memsz,
-            self.align,
-        );
+    pub fn print(&self, out: &mut Output, index: u16) process::ExitCode!void {
+        out.write(b"  ").?;
+        out.print("{:<2} ", [&index]).?;
+        self.print_name(out).?;
+        out.write(b" ").?;
+        self.print_flags(out).?;
+        out.print("  off=0x{:08x} vaddr=0x{:016x} filesz=0x{:08x} memsz=0x{:08x} align=0x{:x}\n", [
+            &self.offset,
+            &self.vaddr,
+            &self.filesz,
+            &self.memsz,
+            &self.align,
+        ]).?;
+        !{}
     }
 }

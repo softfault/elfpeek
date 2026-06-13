@@ -1,17 +1,14 @@
-import ..c;
-import ..util;
-import .section;
-import .symbol;
-import .types;
-
-using c::*;
-using types::*;
-using util::*;
+using std::CStr;
+using std::fmt;
+using std::process;
+using root::output::Output;
+using root::util::*;
+using super::types::*;
 
 extend RelocationInfo {
     // Read REL or RELA entries. RELA carries an explicit addend; REL leaves it
     // in the relocated location, so this tool prints zero for REL addends.
-    pub fn read(buf: &const [u8], class: u8, off: usize, rela: bool, little: bool) RelocationInfo {
+    pub fn read(buf: &[u8], class: u8, off: usize, rela: bool, little: bool) RelocationInfo {
         if class == ELFCLASS32 {
             var info32 = read_u32(buf, off + 4, little) as u64;
             var addend32: u64 = 0;
@@ -42,12 +39,16 @@ extend RelocationInfo {
 extend ElfFile {
     // Walk all relocation sections and print their decoded type, symbol index,
     // optional addend, and symbol name when the linked symbol table is present.
-    pub fn print_relocations(&const self, buf: &const [u8]) i32 {
+    // RELA stores the addend in the entry; REL only stores offset/info, so this
+    // tool reports no addend for REL entries.
+    pub fn print_relocations(&self, out: &mut Output, buf: &[u8]) process::ExitCode!i32 {
         var found = false;
 
-        for i: u16 in 0..self.section_count {
+        var i: u16 = 0;
+        while i < self.section_count {
             var relsec = self.sections[i as usize];
-            if !relsec.is_relocation_table() {
+            if not relsec.is_relocation_table() {
+                i += 1;
                 continue;
             }
 
@@ -62,66 +63,80 @@ extend ElfFile {
                     if rela { 24 } else { 16 }
                 };
             }
-            if entsize == 0 or relsec.offset + relsec.size > buf.len() as u64 {
+            // If the table range is invalid, skip this section instead of letting
+            // a corrupt section header drive reads outside the file buffer.
+            if entsize == 0 {
+                i += 1;
                 continue;
             }
+            switch file_range(buf.len(), relsec.offset, relsec.size) {
+                ?range => _ = range,
+                null => {
+                    i += 1;
+                    continue;
+                },
+            };
 
             var symtab = SectionHeader::empty();
             var has_symtab = false;
             if relsec.link < self.section_count as u32 {
                 // sh_link of a relocation section usually names the symbol table
-                // used by r_info's symbol index.
+                // used by r_info's symbol index; symbol_name_at follows that
+                // symbol table's own sh_link to the string table.
                 symtab = self.sections[relsec.link as usize];
                 has_symtab = symtab.is_symbol_table();
             }
 
             var count = relsec.size / entsize;
             if count == 0 {
+                i += 1;
                 continue;
             }
 
-            printf(c"\nRelocations from ");
-            print_cstr_at(self.shstrtab, relsec.name);
-            printf(c" (%llu entries)\n", count);
+            out.write(b"\nRelocations from ").?;
+            print_cstr_at(out, self.shstrtab, relsec.name).?;
+            out.write(b" (").?;
+            out.print("{} entries)\n", [&count]).?;
             found = true;
 
-            for j: u64 in 0..count {
-                var off64 = relsec.offset + (j * entsize);
-                if off64 + entsize > buf.len() as u64 {
-                    break;
-                }
+            var j: u64 = 0;
+            while j < count {
+                let off = switch table_entry_offset(relsec.offset, j, entsize, buf.len()) {
+                    ?value => value,
+                    null => break,
+                };
 
                 var rel = RelocationInfo::read(
                     buf,
                     self.header.class,
-                    off64 as usize,
+                    off,
                     rela,
                     self.header.little,
                 );
                 var sym_index = rel.symbol_index(self.header.class);
-                printf(
-                    c"  0x%012llx  type=%u  sym=%llu",
-                    rel.offset,
-                    rel.kind(self.header.class),
-                    sym_index,
-                );
+                let rel_kind = rel.kind(self.header.class);
+                out.print("  0x{:012x}  type={}  sym={}", [&rel.offset, &rel_kind, &sym_index]).?;
                 if rela and rel.addend != 0 {
-                    printf(c"  addend=%lld", rel.addend);
+                    let addend = rel.addend as i64;
+                    out.print("  addend={}", [&addend]).?;
                 }
                 if has_symtab {
-                    var name: &const u8 = 0usize as &const u8;
-                    if self.symbol_name_at(buf, &const symtab, sym_index, &name) and name[0] != 0u8 {
-                        printf(c"  %s", name);
+                    var name = CStr::from_ptr(c"");
+                    if self.symbol_name_at(buf, &symtab, sym_index, &mut name) and not name.is_empty() {
+                        out.write(b"  ").?;
+                        out.cstr(name).?;
                     }
                 }
-                printf(c"\n");
+                out.write(b"\n").?;
+                j += 1;
             }
+            i += 1;
         }
 
-        if !found {
-            printf(c"\nRelocations\n  (no relocation sections)\n");
+        if not found {
+            out.write(b"\nRelocations\n  (no relocation sections)\n").?;
         }
 
-        0
+        !0
     }
 }

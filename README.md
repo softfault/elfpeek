@@ -8,14 +8,9 @@ quick inspection commands without a REPL.
 
 ## Requirements
 
-This project is written in [Nia](https://github.com/nialang/nia). Build it with
-`nia`, the Nia compiler.
-
-If you have Rust/Cargo installed, one way to install the compiler is:
-
-```sh
-cargo install --git https://github.com/nialang/nia nia-cli
-```
+This project is written in [Nia](https://github.com/nialang/nia). Follow the Nia
+project's installation or development instructions so the `nia` command and the
+matching standard library are available together.
 
 ## Layout
 
@@ -28,13 +23,13 @@ cargo install --git https://github.com/nialang/nia nia-cli
 - `src/elf/reloc.nia` - relocation table parsing/printing
 - `src/command.nia` - command mode and parsed CLI request values
 - `src/util.nia` - byte-order readers and small output helpers
-- `src/c.nia` - C ABI declarations
+- `src/output.nia` - standard-library stdout/stderr helpers and fixed formatting
 
 ## Build
 
 ```sh
 nia check src/main.nia
-nia emit exe src/main.nia -o build/elfpeek
+nia emit --exe src/main.nia -o build/elfpeek
 ```
 
 ## Run
@@ -55,9 +50,29 @@ Example:
 ./build/elfpeek build/elfpeek strings .dynstr 4
 ```
 
-The input buffer is allocated with `malloc` based on the file size and released
-after parsing. Section data, symbol names, dumps, strings, and relocations are
-read as slices over that buffer instead of being copied into secondary storage.
+## Design notes
+
+The input buffer is allocated through the Nia standard-library allocator based on
+the file size and released after parsing. File IO and output use `std::fs` and
+`std::io`; the project no longer declares libc bindings. Section data, symbol
+names, dumps, strings, and relocations are read as slices over that buffer
+instead of being copied into secondary storage.
+
+ELF32 and ELF64 records are normalized into compact structs with `u64` offsets
+and addresses. Before any table entry is read, `table_entry_offset` checks both
+`index * entsize` and `base + relative`; before a file slice is borrowed,
+`file_range` checks `offset + size` and converts to `usize` bounds. Malformed
+tables are truncated or skipped instead of driving unchecked reads.
+
+ELF string tables stay in the byte/C-string domain. Section names, symbol names,
+CLI paths, and raw dump targets are handled as `CStr` or `&[u8]` at the boundary
+where that is the native representation; the tool only formats them after a NUL
+terminator has been found inside the borrowed ELF string-table slice.
+
+Output helpers return `process::ExitCode!void`, so write and flush failures are
+propagated through `.?` style error handling rather than silently ignored. CLI
+parse failures report usage errors instead of defaulting invalid numeric input to
+zero.
 
 ## License
 

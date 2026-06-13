@@ -1,68 +1,72 @@
-import .c;
-import .command;
-import .elf.header;
-import .elf.reloc;
-import .elf.section;
-import .elf.symbol;
-import .elf.types;
+pub module header;
+pub module reloc;
+pub module section;
+pub module symbol;
+pub module types;
 
-using c::*;
-using command::{Cli, Mode};
-using types::*;
+using std::fmt;
+using std::process;
+using root::command::{Cli, Mode};
+using root::output::Output;
+using root::util::table_entry_offset;
+using self::types::*;
 
 // Public helper used by main before the full ELF parser is entered.
-pub fn print_small_ident_error() void {
-    printf(c"error: file is too small for an ELF ident\n");
+pub fn print_small_ident_error(out: &mut Output) process::ExitCode!void {
+    out.err(b"error: file is too small for an ELF ident\n").?;
+    !{}
 }
 
 // Program headers are read on demand instead of stored in ElfFile. They are
 // needed for summary output and address resolution, but keeping only sections
 // avoids a second fixed-size stack/struct array.
 fn print_program_headers(
-    buf: &const [u8],
+    out: &mut Output,
+    buf: &[u8],
     size: usize,
     class: u8,
     little: bool,
     phoff: u64,
     phentsize: u16,
     phnum: u16,
-) void {
+) process::ExitCode!void {
     if phoff > size as u64 {
-        return;
+        return !{};
     }
 
-    printf(c"\nProgram headers\n");
-    printf(
-        c"  #  Type         Flg  Offset     VirtAddr"
-        c"           FileSiz    MemSiz     Align\n"
-    );
+    out.write(b"\nProgram headers\n").?;
+    out.write(b"  #  Type         Flg  Offset     VirtAddr           FileSiz    MemSiz     Align\n").?;
 
     var i: u16 = 0;
     while i < phnum {
-        var off64 = phoff + (i as u64 * phentsize as u64);
-        if off64 + phentsize as u64 > size as u64 {
-            printf(c"  %u  <truncated>\n", i as u32);
-            break;
-        }
+        let off = switch table_entry_offset(phoff, i as u64, phentsize as u64, size) {
+            ?value => value,
+            null => {
+                out.write(b"  ").?;
+                out.print("{}  <truncated>\n", [&i]).?;
+                break;
+            },
+        };
 
-        var off = off64 as usize;
         var ph = ProgramHeader::read(buf, class, off, little);
-        ph.print(i);
+        ph.print(out, i).?;
         i += 1;
     }
+    !{}
 }
 
-pub fn inspect_bytes(buf: &const [u8], size: usize, cli: &const Cli) i32 {
+pub fn inspect_bytes(out: &mut Output, buf: &[u8], size: usize, cli: &Cli) process::ExitCode!i32 {
     if size < 16 {
-        print_small_ident_error();
-        return 1;
+        print_small_ident_error(out).?;
+        return !1;
     }
 
     // The first 16 bytes are e_ident. They decide whether this is ELF at all
-    // and which layout/endian readers the rest of the parser must use.
-    if buf[0] != 0x7fu8 or buf[1] != b'E' or buf[2] != b'L' or buf[3] != b'F' {
-        printf(c"error: not an ELF file\n");
-        return 1;
+    // and which layout/endian readers the rest of the parser must use. No
+    // multi-byte field is read until these bytes have been validated.
+    if buf[0] != 0x7f or buf[1] != b'E' or buf[2] != b'L' or buf[3] != b'F' {
+        out.err(b"error: not an ELF file\n").?;
+        return !1;
     }
 
     var class = buf[4];
@@ -72,8 +76,10 @@ pub fn inspect_bytes(buf: &const [u8], size: usize, cli: &const Cli) i32 {
     // Only the standard little/big endian encodings are supported. Unknown
     // values are rejected before any multi-byte fields are read.
     if data != 1 and data != 2 {
-        printf(c"error: unsupported ELF data encoding %u\n", data as u32);
-        return 1;
+        out.err(b"error: unsupported ELF data encoding ").?;
+        let data_value = data as u32;
+        out.err_print("{}\n", [&data_value]).?;
+        return !1;
     }
 
     var header_size: usize = 0;
@@ -83,30 +89,36 @@ pub fn inspect_bytes(buf: &const [u8], size: usize, cli: &const Cli) i32 {
         if class == 2 {
             header_size = 64;
         } else {
-            printf(c"error: unsupported ELF class %u\n", class as u32);
-            return 1;
+            out.err(b"error: unsupported ELF class ").?;
+            let class_value = class as u32;
+            out.err_print("{}\n", [&class_value]).?;
+            return !1;
         }
     }
 
     if size < header_size {
-        printf(c"error: file is too small for its ELF header\n");
-        return 1;
+        out.err(b"error: file is too small for its ELF header\n").?;
+        return !1;
     }
 
+    // From this point on the parser keeps borrowed views into `buf`. The caller
+    // owns that buffer for the whole inspection, so section and string-table
+    // slices can stay allocation-free.
     var header = ElfHeader::read(buf, class, data, little);
     var elf = ElfFile::read(buf, header);
 
     // Single-purpose subcommands return early so summary-only work is skipped.
     switch cli.mode {
-        Mode::Dump => return elf.dump_target(buf, cli.arg, cli.value),
-        Mode::Strings => return elf.print_strings_from(buf, cli.arg, cli.min_len),
-        Mode::Relocs => return elf.print_relocations(buf),
+        Mode::Dump => return elf.dump_target(out, buf, cli.arg, cli.value),
+        Mode::Strings => return elf.print_strings_from(out, buf, cli.arg, cli.min_len),
+        Mode::Relocs => return elf.print_relocations(out, buf),
         _ => {},
     }
 
-    header.print();
+    header.print(out).?;
     if header.phnum > 0 {
         print_program_headers(
+            out,
             buf,
             size,
             header.class,
@@ -114,13 +126,13 @@ pub fn inspect_bytes(buf: &const [u8], size: usize, cli: &const Cli) i32 {
             header.phoff,
             header.phentsize,
             header.phnum,
-        );
+        ).?;
     }
-    elf.print_sections();
-    elf.print_symbols(buf);
+    elf.print_sections(out).?;
+    elf.print_symbols(out, buf).?;
     if cli.mode == Mode::Resolve {
-        elf.resolve_addr(buf, cli.value);
+        elf.resolve_addr(out, buf, cli.value).?;
     }
 
-    0
+    !0
 }

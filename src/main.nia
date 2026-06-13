@@ -134,107 +134,107 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
     let argc = args.len();
     let prog = arg_or(args, 0, CStr::from_ptr(c"elfpeek"));
 
-    if argc == 1 {
-        return print_help(out, prog);
-    }
-
-    let arg1 = switch require_arg(args, 1) {
-        ?value => value,
-        null => return print_help(out, prog),
-    };
-
-    if argc == 2 {
-        let arg1_bytes = arg1.bytes();
-        if bytes_eq(arg1_bytes, b"-h") or bytes_eq(arg1_bytes, b"--help") or bytes_eq(arg1_bytes, b"help") {
-            return print_help(out, prog);
-        }
-    }
-
-    if argc > 5 {
-        return print_error_usage(out, prog, b"too many arguments");
-    }
-
-    if argc == 3 {
-        let arg2 = switch require_arg(args, 2) {
-            ?value => value,
-            null => return print_error_usage(out, prog, b"missing argument"),
-        };
-        let arg2_bytes = arg2.bytes();
-
-        if bytes_eq(arg2_bytes, b"dump") {
-            return print_error_usage(out, prog, b"dump requires a section name or @offset");
-        }
-
-        if bytes_eq(arg2_bytes, b"strings") {
-            var cli = Cli::strings(arg1.cstr(), CStr::from_ptr(c".rodata"), DEFAULT_STRING_MIN);
-            return inspect_path(init, out, &cli, allocator);
-        }
-
-        if bytes_eq(arg2_bytes, b"relocs") {
-            var cli = Cli::relocs(arg1.cstr());
-            return inspect_path(init, out, &cli, allocator);
-        }
-
-        let addr = switch parse_u64_arg(arg2) {
-            ?value => value,
-            null => return print_error_usage(out, prog, b"unknown command or invalid address"),
-        };
-        var cli = Cli::resolve(arg1.cstr(), addr);
-        return inspect_path(init, out, &cli, allocator);
-    }
-
-    if argc == 4 or argc == 5 {
-        let arg2 = switch require_arg(args, 2) {
-            ?value => value,
-            null => return print_error_usage(out, prog, b"missing command"),
-        };
-        let arg3 = switch require_arg(args, 3) {
-            ?value => value,
-            null => return print_error_usage(out, prog, b"missing argument"),
-        };
-        let arg2_bytes = arg2.bytes();
-
-        if bytes_eq(arg2_bytes, b"dump") {
-            var len = DEFAULT_DUMP_LEN;
-            if argc == 5 {
-                let arg4 = switch require_arg(args, 4) {
-                    ?value => value,
-                    null => return print_error_usage(out, prog, b"missing length"),
-                };
-                len = switch parse_u64_arg(arg4) {
-                    ?value => value,
-                    null => return print_error_usage(out, prog, b"invalid dump length"),
-                };
+    switch argc {
+        0..=1 => return print_help(out, prog),
+        2 => {
+            let arg1 = switch require_arg(args, 1) {
+                ?value => value,
+                null => return print_help(out, prog),
+            };
+            let arg1_bytes = arg1.bytes();
+            if bytes_eq(arg1_bytes, b"-h") or bytes_eq(arg1_bytes, b"--help") or bytes_eq(arg1_bytes, b"help") {
+                return print_help(out, prog);
             }
-            var cli = Cli::dump(arg1.cstr(), arg3.cstr(), len);
+            var cli = Cli::summary(arg1.cstr());
             return inspect_path(init, out, &cli, allocator);
-        }
+        },
+        3 => {
+            let arg1 = switch require_arg(args, 1) {
+                ?value => value,
+                null => return print_help(out, prog),
+            };
+            let arg2 = switch require_arg(args, 2) {
+                ?value => value,
+                null => return print_error_usage(out, prog, b"missing argument"),
+            };
+            let arg2_bytes = arg2.bytes();
 
-        if bytes_eq(arg2_bytes, b"strings") {
-            var min_len = DEFAULT_STRING_MIN;
-            if argc == 5 {
-                let arg4 = switch require_arg(args, 4) {
-                    ?value => value,
-                    null => return print_error_usage(out, prog, b"missing minimum length"),
-                };
-                min_len = switch parse_usize_arg(arg4) {
-                    ?value => value,
-                    null => return print_error_usage(out, prog, b"invalid minimum length"),
-                };
+            if bytes_eq(arg2_bytes, b"dump") {
+                return print_error_usage(out, prog, b"dump requires a section name or @offset");
             }
-            var cli = Cli::strings(arg1.cstr(), arg3.cstr(), min_len);
+
+            if bytes_eq(arg2_bytes, b"strings") {
+                var cli = Cli::strings(arg1.cstr(), CStr::from_ptr(c".rodata"), DEFAULT_STRING_MIN);
+                return inspect_path(init, out, &cli, allocator);
+            }
+
+            if bytes_eq(arg2_bytes, b"relocs") {
+                var cli = Cli::relocs(arg1.cstr());
+                return inspect_path(init, out, &cli, allocator);
+            }
+
+            let addr = switch parse_u64_arg(arg2) {
+                ?value => value,
+                null => return print_error_usage(out, prog, b"unknown command or invalid address"),
+            };
+            var cli = Cli::resolve(arg1.cstr(), addr);
             return inspect_path(init, out, &cli, allocator);
-        }
+        },
+        4..=5 => {
+            let arg1 = switch require_arg(args, 1) {
+                ?value => value,
+                null => return print_help(out, prog),
+            };
+            let arg2 = switch require_arg(args, 2) {
+                ?value => value,
+                null => return print_error_usage(out, prog, b"missing command"),
+            };
+            let arg3 = switch require_arg(args, 3) {
+                ?value => value,
+                null => return print_error_usage(out, prog, b"missing argument"),
+            };
+            let arg2_bytes = arg2.bytes();
 
-        if bytes_eq(arg2_bytes, b"relocs") {
-            return print_error_usage(out, prog, b"relocs does not take extra arguments");
-        }
+            if bytes_eq(arg2_bytes, b"dump") {
+                var len = DEFAULT_DUMP_LEN;
+                if argc == 5 {
+                    let arg4 = switch require_arg(args, 4) {
+                        ?value => value,
+                        null => return print_error_usage(out, prog, b"missing length"),
+                    };
+                    len = switch parse_u64_arg(arg4) {
+                        ?value => value,
+                        null => return print_error_usage(out, prog, b"invalid dump length"),
+                    };
+                }
+                var cli = Cli::dump(arg1.cstr(), arg3.cstr(), len);
+                return inspect_path(init, out, &cli, allocator);
+            }
 
-        return print_error_usage(out, prog, b"unknown command");
+            if bytes_eq(arg2_bytes, b"strings") {
+                var min_len = DEFAULT_STRING_MIN;
+                if argc == 5 {
+                    let arg4 = switch require_arg(args, 4) {
+                        ?value => value,
+                        null => return print_error_usage(out, prog, b"missing minimum length"),
+                    };
+                    min_len = switch parse_usize_arg(arg4) {
+                        ?value => value,
+                        null => return print_error_usage(out, prog, b"invalid minimum length"),
+                    };
+                }
+                var cli = Cli::strings(arg1.cstr(), arg3.cstr(), min_len);
+                return inspect_path(init, out, &cli, allocator);
+            }
+
+            if bytes_eq(arg2_bytes, b"relocs") {
+                return print_error_usage(out, prog, b"relocs does not take extra arguments");
+            }
+
+            return print_error_usage(out, prog, b"unknown command");
+        },
+        _ => return print_error_usage(out, prog, b"too many arguments"),
     }
-
-    var cli = Cli::summary(arg1.cstr());
-    inspect_path(init, out, &cli, allocator)
 }
 
 pub fn main(init: Init) ExitCode!void {

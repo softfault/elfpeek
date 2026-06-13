@@ -32,6 +32,15 @@ nia check src/main.nia
 nia emit --exe src/main.nia -o build/elfpeek
 ```
 
+## Test
+
+```sh
+tests/run.sh
+```
+
+The test fixtures cover small ELF32/ELF64 files in little and big endian plus a
+few Linux ELF64 layout variants.
+
 ## Run
 
 ```sh

@@ -2,6 +2,11 @@
 
 `elfpeek` is a small ELF inspection tool written in Nia.
 
+It is a Nia practice project inspired by
+[Oblivionsage/elfpeek](https://github.com/Oblivionsage/elfpeek), with a focus on
+being a compact example of ELF parsing, CLI error handling, and standard-library
+usage in Nia.
+
 The source entry point is `src/main.nia`. It reads an ELF file into one heap
 buffer, parses ELF32/ELF64 headers in little or big endian, and exposes a few
 quick inspection commands without a REPL.
@@ -39,7 +44,9 @@ tests/run.sh
 ```
 
 The test fixtures cover small ELF32/ELF64 files in little and big endian plus a
-few Linux ELF64 layout variants.
+few Linux ELF64 layout variants. They are copied from the MIT-licensed
+`Oblivionsage/elfpeek` test corpus and committed directly under
+`tests/fixtures/`.
 
 ## Run
 

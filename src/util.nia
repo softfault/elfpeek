@@ -1,5 +1,6 @@
 using std::math;
 using std::process;
+using std::range;
 
 using super::output;
 
@@ -103,12 +104,10 @@ pub(package) fn bytes_eq(a: &[u8], b: &[u8]) bool {
     if a.len() != b.len() {
         return false;
     }
-    var i: usize = 0;
-    while i < a.len() {
+    for i in range(0usize..a.len()) {
         if a[i] != b[i] {
             return false;
         }
-        i += 1;
     }
     true
 }
@@ -139,10 +138,8 @@ pub(package) fn print_byte_ascii(out: &mut output::Output, ch: u8) process::Exit
 }
 
 pub(package) fn print_string_bytes(out: &mut output::Output, buf: &[u8], start: usize, end: usize) process::ExitCode!void {
-    var i = start;
-    while i < end {
+    for i in range(start..end) {
         out.byte(buf[i]).?;
-        i += 1;
     }
     !{}
 }

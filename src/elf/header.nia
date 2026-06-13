@@ -144,7 +144,17 @@ extend ElfHeader {
         print_elf_type(out, self.kind).?;
         print_machine(out, self.machine).?;
         out.write(b"  ELF version:           ").?;
-        out.print("{}\n  Entry point:           0x{:x}\n  Program header offset: {}\n  Section header offset: {}\n  Flags:                 0x{:x}\n  ELF header size:       {}\n  Program headers:       {} entries, {} bytes each\n  Section headers:       {} entries, {} bytes each\n  Section name index:    {}\n", &[
+        out.print(
+            "{}\n"
+            "  Entry point:           0x{:x}\n"
+            "  Program header offset: {}\n"
+            "  Section header offset: {}\n"
+            "  Flags:                 0x{:x}\n"
+            "  ELF header size:       {}\n"
+            "  Program headers:       {} entries, {} bytes each\n"
+            "  Section headers:       {} entries, {} bytes each\n"
+            "  Section name index:    {}\n",
+            &[
             &self.elf_version,
             &self.entry,
             &self.phoff,
@@ -156,7 +166,8 @@ extend ElfHeader {
             &self.shnum,
             &self.shentsize,
             &self.shstrndx,
-        ]).?;
+            ],
+        ).?;
         !{}
     }
 }

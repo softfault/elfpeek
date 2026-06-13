@@ -58,7 +58,15 @@ pub(package) fn print_help(out: &mut output::Output, prog: CStr) process::ExitCo
     out.write(b"elfpeek - inspect ELF headers, sections, symbols, and relocations\n\nUsage:\n").?;
     print_command_lines(out, prog).?;
     out.write(
-        b"\nCommands:\n  summary                 Show headers, sections, and symbols\n  0xaddr                  Resolve a virtual address\n  dump .text 64           Dump bytes from a section\n  dump @0x1000 64         Dump bytes from a raw file offset\n  strings .rodata 4       Print printable strings from a section\n  relocs                  Print relocation entries\n\nDefaults:\n  dump length             "
+        b"\nCommands:\n"
+        b"  summary                 Show headers, sections, and symbols\n"
+        b"  0xaddr                  Resolve a virtual address\n"
+        b"  dump .text 64           Dump bytes from a section\n"
+        b"  dump @0x1000 64         Dump bytes from a raw file offset\n"
+        b"  strings .rodata 4       Print printable strings from a section\n"
+        b"  relocs                  Print relocation entries\n"
+        b"\nDefaults:\n"
+        b"  dump length             "
     ).?;
     out.print("{}", &[&DEFAULT_DUMP_LEN]).?;
     out.write(b" bytes\n  strings section         .rodata\n  strings min length      ").?;

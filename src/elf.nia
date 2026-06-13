@@ -1,18 +1,18 @@
-pub module header;
-pub module reloc;
-pub module section;
-pub module symbol;
-pub module types;
+module header;
+module reloc;
+module section;
+module symbol;
+module types;
 
 using std::fmt;
 using std::process;
-using root::command::{Cli, Mode};
-using root::output::Output;
-using root::util::table_entry_offset;
-using self::types::*;
+using super::command;
+using super::output;
+using super::util;
+using self::types;
 
 // Public helper used by main before the full ELF parser is entered.
-pub fn print_small_ident_error(out: &mut Output) process::ExitCode!void {
+pub(package) fn print_small_ident_error(out: &mut output::Output) process::ExitCode!void {
     out.err(b"error: file is too small for an ELF ident\n").?;
     !{}
 }
@@ -21,7 +21,7 @@ pub fn print_small_ident_error(out: &mut Output) process::ExitCode!void {
 // needed for summary output and address resolution, but keeping only sections
 // avoids a second fixed-size stack/struct array.
 fn print_program_headers(
-    out: &mut Output,
+    out: &mut output::Output,
     buf: &[u8],
     size: usize,
     class: u8,
@@ -39,7 +39,7 @@ fn print_program_headers(
 
     var i: u16 = 0;
     while i < phnum {
-        let off = switch table_entry_offset(phoff, i as u64, phentsize as u64, size) {
+        let off = switch util::table_entry_offset(phoff, i as u64, phentsize as u64, size) {
             ?value => value,
             null => {
                 out.write(b"  ").?;
@@ -48,14 +48,14 @@ fn print_program_headers(
             },
         };
 
-        var ph = ProgramHeader::read(buf, class, off, little);
+        var ph = types::ProgramHeader::read(buf, class, off, little);
         ph.print(out, i).?;
         i += 1;
     }
     !{}
 }
 
-pub fn inspect_bytes(out: &mut Output, buf: &[u8], size: usize, cli: &Cli) process::ExitCode!i32 {
+pub(package) fn inspect_bytes(out: &mut output::Output, buf: &[u8], size: usize, cli: &command::Cli) process::ExitCode!i32 {
     if size < 16 {
         print_small_ident_error(out).?;
         return !1;
@@ -104,14 +104,14 @@ pub fn inspect_bytes(out: &mut Output, buf: &[u8], size: usize, cli: &Cli) proce
     // From this point on the parser keeps borrowed views into `buf`. The caller
     // owns that buffer for the whole inspection, so section and string-table
     // slices can stay allocation-free.
-    var header = ElfHeader::read(buf, class, data, little);
-    var elf = ElfFile::read(buf, header);
+    var header = types::ElfHeader::read(buf, class, data, little);
+    var elf = types::ElfFile::read(buf, header);
 
     // Single-purpose subcommands return early so summary-only work is skipped.
     switch cli.mode {
-        Mode::Dump => return elf.dump_target(out, buf, cli.arg, cli.value),
-        Mode::Strings => return elf.print_strings_from(out, buf, cli.arg, cli.min_len),
-        Mode::Relocs => return elf.print_relocations(out, buf),
+        command::Mode::Dump => return elf.dump_target(out, buf, cli.arg, cli.value),
+        command::Mode::Strings => return elf.print_strings_from(out, buf, cli.arg, cli.min_len),
+        command::Mode::Relocs => return elf.print_relocations(out, buf),
         _ => {},
     }
 
@@ -130,7 +130,7 @@ pub fn inspect_bytes(out: &mut Output, buf: &[u8], size: usize, cli: &Cli) proce
     }
     elf.print_sections(out).?;
     elf.print_symbols(out, buf).?;
-    if cli.mode == Mode::Resolve {
+    if cli.mode == command::Mode::Resolve {
         elf.resolve_addr(out, buf, cli.value).?;
     }
 

@@ -1,13 +1,13 @@
 using std::CStr;
 using std::process;
-using root::output::Output;
+using super::output;
 
-pub comptime let DEFAULT_DUMP_LEN: u64 = 256;
-pub comptime let DEFAULT_STRING_MIN: usize = 4;
+pub(package) comptime let DEFAULT_DUMP_LEN: u64 = 256;
+pub(package) comptime let DEFAULT_STRING_MIN: usize = 4;
 
 // The CLI is command-shaped, but the rest of the program only needs this small
 // mode enum plus a few optional values.
-pub enum Mode: u8 {
+pub(package) enum Mode: u8 {
     Summary,
     Resolve,
     Dump,
@@ -15,7 +15,7 @@ pub enum Mode: u8 {
     Relocs,
 }
 
-pub struct Cli {
+pub(package) struct Cli {
     mode: Mode,
     path: CStr,
     arg: CStr,
@@ -23,7 +23,7 @@ pub struct Cli {
     min_len: usize,
 }
 
-fn print_command_lines(out: &mut Output, prog: CStr) process::ExitCode!void {
+fn print_command_lines(out: &mut output::Output, prog: CStr) process::ExitCode!void {
     out.write(b"  ").?;
     out.cstr(prog).?;
     out.write(b" <elf-file>\n  ").?;
@@ -38,7 +38,7 @@ fn print_command_lines(out: &mut Output, prog: CStr) process::ExitCode!void {
     !{}
 }
 
-fn print_command_lines_stderr(out: &mut Output, prog: CStr) process::ExitCode!void {
+fn print_command_lines_stderr(out: &mut output::Output, prog: CStr) process::ExitCode!void {
     out.err(b"  ").?;
     out.err_cstr(prog).?;
     out.err(b" <elf-file>\n  ").?;
@@ -54,7 +54,7 @@ fn print_command_lines_stderr(out: &mut Output, prog: CStr) process::ExitCode!vo
 }
 
 // The full help is shown for no arguments and explicit help requests.
-pub fn print_help(out: &mut Output, prog: CStr) process::ExitCode!i32 {
+pub(package) fn print_help(out: &mut output::Output, prog: CStr) process::ExitCode!i32 {
     out.write(b"elfpeek - inspect ELF headers, sections, symbols, and relocations\n\nUsage:\n").?;
     print_command_lines(out, prog).?;
     out.write(
@@ -67,7 +67,7 @@ pub fn print_help(out: &mut Output, prog: CStr) process::ExitCode!i32 {
     !0
 }
 
-pub fn print_error_usage(out: &mut Output, prog: CStr, message: &[u8]) process::ExitCode!i32 {
+pub(package) fn print_error_usage(out: &mut output::Output, prog: CStr, message: &[u8]) process::ExitCode!i32 {
     out.err(b"error: ").?;
     out.err(message).?;
     out.err(b"\n\nUsage:\n").?;
@@ -79,7 +79,7 @@ pub fn print_error_usage(out: &mut Output, prog: CStr, message: &[u8]) process::
 }
 
 // Kept as a short compatibility wrapper for existing call sites.
-pub fn print_usage(out: &mut Output, prog: CStr) process::ExitCode!i32 {
+fn print_usage(out: &mut output::Output, prog: CStr) process::ExitCode!i32 {
     out.write(b"Usage:\n").?;
     print_command_lines(out, prog).?;
     out.write(b"\nRun '").?;
@@ -91,7 +91,7 @@ pub fn print_usage(out: &mut Output, prog: CStr) process::ExitCode!i32 {
 extend Cli {
     // Associated constructors make the call sites state the intended command
     // instead of filling unrelated fields by hand.
-    pub fn summary(path: CStr) Cli {
+    pub(package) fn summary(path: CStr) Cli {
         {
             mode: Mode::Summary,
             path: path,
@@ -101,7 +101,7 @@ extend Cli {
         }
     }
 
-    pub fn resolve(path: CStr, addr: u64) Cli {
+    pub(package) fn resolve(path: CStr, addr: u64) Cli {
         {
             mode: Mode::Resolve,
             path: path,
@@ -111,7 +111,7 @@ extend Cli {
         }
     }
 
-    pub fn dump(path: CStr, target: CStr, len: u64) Cli {
+    pub(package) fn dump(path: CStr, target: CStr, len: u64) Cli {
         {
             mode: Mode::Dump,
             path: path,
@@ -121,7 +121,7 @@ extend Cli {
         }
     }
 
-    pub fn strings(path: CStr, section: CStr, min_len: usize) Cli {
+    pub(package) fn strings(path: CStr, section: CStr, min_len: usize) Cli {
         {
             mode: Mode::Strings,
             path: path,
@@ -131,7 +131,7 @@ extend Cli {
         }
     }
 
-    pub fn relocs(path: CStr) Cli {
+    pub(package) fn relocs(path: CStr) Cli {
         {
             mode: Mode::Relocs,
             path: path,

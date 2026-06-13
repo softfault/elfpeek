@@ -2,44 +2,43 @@ using std::CStr;
 using std::fmt;
 using std::math;
 using std::process;
-using root::output::Output;
-using root::util::*;
-using super::types::*;
+using root::{output, util};
+using super::types;
 
-extend SectionHeader {
+extend types::SectionHeader {
     // Read one section header and normalize ELF32 fields into the ELF64-sized
     // SectionHeader representation.
-    pub fn read(buf: &[u8], class: u8, off: usize, little: bool) SectionHeader {
-        if class == ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) types::SectionHeader {
+        if class == types::ELFCLASS32 {
             return {
-                name: read_u32(buf, off, little),
-                kind: read_u32(buf, off + 4, little),
-                flags: read_u32(buf, off + 8, little) as u64,
-                addr: read_u32(buf, off + 12, little) as u64,
-                offset: read_u32(buf, off + 16, little) as u64,
-                size: read_u32(buf, off + 20, little) as u64,
-                link: read_u32(buf, off + 24, little),
-                info: read_u32(buf, off + 28, little),
-                addralign: read_u32(buf, off + 32, little) as u64,
-                entsize: read_u32(buf, off + 36, little) as u64,
+                name: util::read_u32(buf, off, little),
+                kind: util::read_u32(buf, off + 4, little),
+                flags: util::read_u32(buf, off + 8, little) as u64,
+                addr: util::read_u32(buf, off + 12, little) as u64,
+                offset: util::read_u32(buf, off + 16, little) as u64,
+                size: util::read_u32(buf, off + 20, little) as u64,
+                link: util::read_u32(buf, off + 24, little),
+                info: util::read_u32(buf, off + 28, little),
+                addralign: util::read_u32(buf, off + 32, little) as u64,
+                entsize: util::read_u32(buf, off + 36, little) as u64,
             };
         }
 
         {
-            name: read_u32(buf, off, little),
-            kind: read_u32(buf, off + 4, little),
-            flags: read_u64(buf, off + 8, little),
-            addr: read_u64(buf, off + 16, little),
-            offset: read_u64(buf, off + 24, little),
-            size: read_u64(buf, off + 32, little),
-            link: read_u32(buf, off + 40, little),
-            info: read_u32(buf, off + 44, little),
-            addralign: read_u64(buf, off + 48, little),
-            entsize: read_u64(buf, off + 56, little),
+            name: util::read_u32(buf, off, little),
+            kind: util::read_u32(buf, off + 4, little),
+            flags: util::read_u64(buf, off + 8, little),
+            addr: util::read_u64(buf, off + 16, little),
+            offset: util::read_u64(buf, off + 24, little),
+            size: util::read_u64(buf, off + 32, little),
+            link: util::read_u32(buf, off + 40, little),
+            info: util::read_u32(buf, off + 44, little),
+            addralign: util::read_u64(buf, off + 48, little),
+            entsize: util::read_u64(buf, off + 56, little),
         }
     }
 
-    fn print_type_name(&self, out: &mut Output) process::ExitCode!void {
+    fn print_type_name(&self, out: &mut output::Output) process::ExitCode!void {
         // This is intentionally a display whitelist, not a full ELF registry.
         switch self.kind {
             0 => out.write(b"NULL      "),
@@ -63,18 +62,18 @@ extend SectionHeader {
         !{}
     }
 
-    fn print_flags(&self, out: &mut Output) process::ExitCode!void {
-        out.byte(if (self.flags & SHF_WRITE) != 0 { b'W' } else { b' ' }).?;
-        out.byte(if (self.flags & SHF_ALLOC) != 0 { b'A' } else { b' ' }).?;
-        out.byte(if (self.flags & SHF_EXECINSTR) != 0 { b'X' } else { b' ' }).?;
+    fn print_flags(&self, out: &mut output::Output) process::ExitCode!void {
+        out.byte(if (self.flags & types::SHF_WRITE) != 0 { b'W' } else { b' ' }).?;
+        out.byte(if (self.flags & types::SHF_ALLOC) != 0 { b'A' } else { b' ' }).?;
+        out.byte(if (self.flags & types::SHF_EXECINSTR) != 0 { b'X' } else { b' ' }).?;
         !{}
     }
 
-    pub fn print(&self, out: &mut Output, index: u16, names: &[u8], entry_section: i32) process::ExitCode!void {
+    pub(super) fn print(&self, out: &mut output::Output, index: u16, names: &[u8], entry_section: i32) process::ExitCode!void {
         out.write(b"  ").?;
         out.print("{:<2} ", [&index]).?;
         var name = CStr::from_ptr(c"");
-        if cstr_at(names, self.name, &mut name) {
+        if types::cstr_at(names, self.name, &mut name) {
             out.print("{:<18} ", [&name]).?;
         } else {
             out.write(b"                   ").?;
@@ -95,7 +94,7 @@ extend SectionHeader {
     }
 }
 
-extend ElfFile {
+extend types::ElfFile {
     fn parse_u64_bytes(text: &[u8]) ?u64 {
         switch fmt::parse[u64](text) {
             !value => ?value,
@@ -107,20 +106,20 @@ extend ElfFile {
     // on demand, but section headers are used by dumps, string extraction,
     // symbol lookup, and relocation decoding. The fixed array keeps the example
     // allocation-free after the input file buffer is loaded.
-    pub fn read(buf: &[u8], header: ElfHeader) ElfFile {
-        var file = ElfFile::empty(header, &buf[0..0]);
+    pub(super) fn read(buf: &[u8], header: types::ElfHeader) types::ElfFile {
+        var file = types::ElfFile::empty(header, &buf[0..0]);
 
         // Clamp section count to the fixed storage capacity. This keeps memory
         // explicit and avoids allocating based on untrusted file metadata.
         var count = header.shnum;
-        if count as usize > MAX_SECTIONS {
-            count = MAX_SECTIONS as u16;
+        if count as usize > types::MAX_SECTIONS {
+            count = types::MAX_SECTIONS as u16;
         }
         file.section_count = count;
 
         var i: u16 = 0;
         while i < count {
-            let off = switch table_entry_offset(header.shoff, i as u64, header.shentsize as u64, buf.len()) {
+            let off = switch util::table_entry_offset(header.shoff, i as u64, header.shentsize as u64, buf.len()) {
                 ?value => value,
                 null => {
                     file.section_count = i;
@@ -128,7 +127,7 @@ extend ElfFile {
                 },
             };
             file.sections[i as usize] =
-                SectionHeader::read(buf, header.class, off, header.little);
+                types::SectionHeader::read(buf, header.class, off, header.little);
             i += 1;
         }
 
@@ -137,7 +136,7 @@ extend ElfFile {
         // that table and are validated by cstr_at before printing/comparison.
         if header.shstrndx < file.section_count {
             var shstr = file.sections[header.shstrndx as usize];
-            switch file_range(buf.len(), shstr.offset, shstr.size) {
+            switch util::file_range(buf.len(), shstr.offset, shstr.size) {
                 ?range => file.shstrtab = &buf[range.start..range.end],
                 null => {},
             };
@@ -157,7 +156,7 @@ extend ElfFile {
         file
     }
 
-    pub fn print_sections(&self, out: &mut Output) process::ExitCode!void {
+    pub(super) fn print_sections(&self, out: &mut output::Output) process::ExitCode!void {
         if self.section_count == 0 {
             out.write(b"\nSections\n  (no sections)\n").?;
             return !{};
@@ -173,23 +172,23 @@ extend ElfFile {
         !{}
     }
 
-    pub fn section_bytes(&self, buf: &[u8], section: &SectionHeader) ?&[u8] {
+    pub(super) fn section_bytes(&self, buf: &[u8], section: &types::SectionHeader) ?&[u8] {
         // NOBITS sections such as .bss may not have backing file bytes. Any
         // invalid range is represented explicitly instead of being disguised as
         // an empty slice.
-        switch file_range(buf.len(), section.offset, section.size) {
+        switch util::file_range(buf.len(), section.offset, section.size) {
             ?range => ?&buf[range.start..range.end],
             null => null,
         }
     }
 
-    pub fn find_section(&self, name: CStr, section_out: &mut SectionHeader) bool {
+    pub(super) fn find_section(&self, name: CStr, section_out: &mut types::SectionHeader) bool {
         // Section names are ELF string-table bytes, not owned Nia text. Compare
         // C-string byte views directly and keep the lookup allocation-free.
         var i: u16 = 0;
         while i < self.section_count {
             var section_name = CStr::from_ptr(c"");
-            if cstr_at(self.shstrtab, self.sections[i as usize].name, &mut section_name) and bytes_eq(section_name.bytes(), name.bytes()) {
+            if types::cstr_at(self.shstrtab, self.sections[i as usize].name, &mut section_name) and util::bytes_eq(section_name.bytes(), name.bytes()) {
                 section_out.* = self.sections[i as usize];
                 return true;
             }
@@ -198,7 +197,7 @@ extend ElfFile {
         false
     }
 
-    pub fn dump_range(&self, out: &mut Output, buf: &[u8], offset: u64, wanted_len: u64) process::ExitCode!i32 {
+    pub(super) fn dump_range(&self, out: &mut output::Output, buf: &[u8], offset: u64, wanted_len: u64) process::ExitCode!i32 {
         if offset >= buf.len() as u64 {
             out.err(b"error: offset out of bounds\n").?;
             return !1;
@@ -242,7 +241,7 @@ extend ElfFile {
             while col < 16 {
                 var pos = row + col;
                 if pos < len {
-                    print_byte_ascii(out, buf[(offset + pos) as usize]).?;
+                    util::print_byte_ascii(out, buf[(offset + pos) as usize]).?;
                 }
                 col += 1;
             }
@@ -253,12 +252,12 @@ extend ElfFile {
         !0
     }
 
-    pub fn dump_target(&self, out: &mut Output, buf: &[u8], target: CStr, wanted_len: u64) process::ExitCode!i32 {
+    pub(super) fn dump_target(&self, out: &mut output::Output, buf: &[u8], target: CStr, wanted_len: u64) process::ExitCode!i32 {
         // "dump @0x1234" addresses the raw file. Otherwise the target is a
         // section name such as ".text".
         let target_bytes = target.bytes();
-        if starts_with_at(target_bytes) {
-            let offset = switch parse_u64_bytes(after_at(target_bytes)) {
+        if util::starts_with_at(target_bytes) {
+            let offset = switch parse_u64_bytes(util::after_at(target_bytes)) {
                 ?value => value,
                 null => {
                     out.err(b"error: invalid dump offset '").?;
@@ -270,7 +269,7 @@ extend ElfFile {
             return self.dump_range(out, buf, offset, wanted_len);
         }
 
-        var section = SectionHeader::empty();
+        var section = types::SectionHeader::empty();
         if not self.find_section(target, &mut section) {
             out.err(b"error: section '").?;
             out.err_cstr(target).?;
@@ -285,8 +284,8 @@ extend ElfFile {
         self.dump_range(out, buf, section.offset, len)
     }
 
-    pub fn print_strings_from(&self, out: &mut Output, buf: &[u8], section_name: CStr, min_len: usize) process::ExitCode!i32 {
-        var section = SectionHeader::empty();
+    pub(super) fn print_strings_from(&self, out: &mut output::Output, buf: &[u8], section_name: CStr, min_len: usize) process::ExitCode!i32 {
+        var section = types::SectionHeader::empty();
         if not self.find_section(section_name, &mut section) {
             out.err(b"error: section '").?;
             out.err_cstr(section_name).?;
@@ -323,7 +322,7 @@ extend ElfFile {
         // trailing NUL, which makes it useful for arbitrary data sections too.
         var i: usize = 0;
         while i < bytes.len() {
-            if is_printable_byte(bytes[i]) {
+            if util::is_printable_byte(bytes[i]) {
                 if not in_string {
                     start = i;
                     in_string = true;
@@ -335,7 +334,7 @@ extend ElfFile {
                         out.write(b"  ").?;
                         let string_offset = section.offset + start as u64;
                         out.print("{:08x}  ", [&string_offset]).?;
-                        print_string_bytes(out, bytes, start, i).?;
+                        util::print_string_bytes(out, bytes, start, i).?;
                         out.write(b"\n").?;
                         count += 1;
                     }
@@ -351,7 +350,7 @@ extend ElfFile {
                 out.write(b"  ").?;
                 let string_offset = section.offset + start as u64;
                 out.print("{:08x}  ", [&string_offset]).?;
-                print_string_bytes(out, bytes, start, bytes.len()).?;
+                util::print_string_bytes(out, bytes, start, bytes.len()).?;
                 out.write(b"\n").?;
                 count += 1;
             }

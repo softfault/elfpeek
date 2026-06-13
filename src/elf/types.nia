@@ -1,41 +1,41 @@
 using std::CStr;
 using std::math;
 using std::process;
-using root::output::Output;
+using root::output;
 
 // Shared ELF constants and compact in-memory records. The structs mirror only
 // the fields this tool prints or uses for lookup; unknown ELF fields are skipped
 // while reading rather than stored.
 
-pub comptime let ELFCLASS32: u8 = 1;
-pub comptime let ELFCLASS64: u8 = 2;
+pub(super) comptime let ELFCLASS32: u8 = 1;
+pub(super) comptime let ELFCLASS64: u8 = 2;
 
-pub comptime let PT_LOAD: u32 = 1;
+pub(super) comptime let PT_LOAD: u32 = 1;
 
-pub comptime let PF_X: u32 = 1;
-pub comptime let PF_W: u32 = 2;
-pub comptime let PF_R: u32 = 4;
+pub(super) comptime let PF_X: u32 = 1;
+pub(super) comptime let PF_W: u32 = 2;
+pub(super) comptime let PF_R: u32 = 4;
 
-pub comptime let SHF_WRITE: u64 = 1;
-pub comptime let SHF_ALLOC: u64 = 2;
-pub comptime let SHF_EXECINSTR: u64 = 4;
+pub(super) comptime let SHF_WRITE: u64 = 1;
+pub(super) comptime let SHF_ALLOC: u64 = 2;
+pub(super) comptime let SHF_EXECINSTR: u64 = 4;
 
-pub comptime let SHT_SYMTAB: u32 = 2;
-pub comptime let SHT_STRTAB: u32 = 3;
-pub comptime let SHT_RELA: u32 = 4;
-pub comptime let SHT_REL: u32 = 9;
-pub comptime let SHT_DYNSYM: u32 = 11;
+pub(super) comptime let SHT_SYMTAB: u32 = 2;
+pub(super) comptime let SHT_STRTAB: u32 = 3;
+pub(super) comptime let SHT_RELA: u32 = 4;
+pub(super) comptime let SHT_REL: u32 = 9;
+pub(super) comptime let SHT_DYNSYM: u32 = 11;
 
-pub comptime let STT_OBJECT: u8 = 1;
-pub comptime let STT_FUNC: u8 = 2;
+pub(super) comptime let STT_OBJECT: u8 = 1;
+pub(super) comptime let STT_FUNC: u8 = 2;
 
 // This tool keeps section headers in a fixed array inside ElfFile. 256 is enough
 // for the small inspection target here and keeps allocation strategy explicit.
-pub comptime let MAX_SECTIONS: usize = 256;
+pub(super) comptime let MAX_SECTIONS: usize = 256;
 
 // Normalized ELF header. 32-bit files are widened into u64 offsets/addresses so
 // the rest of the code does not need separate ELF32 and ELF64 paths.
-pub struct ElfHeader {
+pub(super) struct ElfHeader {
     class: u8,
     data: u8,
     ident_version: u8,
@@ -57,7 +57,7 @@ pub struct ElfHeader {
 }
 
 // Normalized program header used for printing and address-to-file-offset lookup.
-pub struct ProgramHeader {
+pub(super) struct ProgramHeader {
     kind: u32,
     flags: u32,
     offset: u64,
@@ -69,7 +69,7 @@ pub struct ProgramHeader {
 
 // Normalized section header. Section names are offsets into the section-name
 // string table, not owned strings.
-pub struct SectionHeader {
+pub(super) struct SectionHeader {
     name: u32,
     kind: u32,
     flags: u64,
@@ -83,7 +83,7 @@ pub struct SectionHeader {
 }
 
 // Minimal symbol table entry. The low nibble of info stores the symbol type.
-pub struct SymbolInfo {
+pub(super) struct SymbolInfo {
     name: u32,
     value: u64,
     size: u64,
@@ -93,7 +93,7 @@ pub struct SymbolInfo {
 
 // Minimal relocation entry. The packed info field is decoded differently for
 // ELF32 and ELF64, so helpers below take the ELF class.
-pub struct RelocationInfo {
+pub(super) struct RelocationInfo {
     offset: u64,
     info: u64,
     addend: u64,
@@ -102,7 +102,7 @@ pub struct RelocationInfo {
 
 // Parsed ELF state that is worth keeping across commands. Section bytes and
 // names remain borrowed from the original file buffer.
-pub struct ElfFile {
+pub(super) struct ElfFile {
     header: ElfHeader,
     sections: [256]SectionHeader,
     section_count: u16,
@@ -114,7 +114,7 @@ pub struct ElfFile {
 // are not Nia-native &[char] text, and this tool keeps them in the byte domain
 // until the formatting boundary. The NUL scan prevents a malformed table from
 // making CStr formatting read past the borrowed string-table slice.
-pub fn cstr_at(buf: &[u8], off: u32, out: &mut CStr) bool {
+pub(super) fn cstr_at(buf: &[u8], off: u32, out: &mut CStr) bool {
     if off as usize >= buf.len() {
         return false;
     }
@@ -129,7 +129,7 @@ pub fn cstr_at(buf: &[u8], off: u32, out: &mut CStr) bool {
     false
 }
 
-pub fn print_cstr_at(out: &mut Output, buf: &[u8], off: u32) process::ExitCode!void {
+pub(super) fn print_cstr_at(out: &mut output::Output, buf: &[u8], off: u32) process::ExitCode!void {
     var text = CStr::from_ptr(c"");
     if cstr_at(buf, off, &mut text) {
         out.cstr(text).?;
@@ -139,7 +139,7 @@ pub fn print_cstr_at(out: &mut Output, buf: &[u8], off: u32) process::ExitCode!v
 
 extend ProgramHeader {
     // LOAD segments describe what virtual address range comes from the file.
-    pub fn contains_addr(&self, addr: u64) bool {
+    pub(super) fn contains_addr(&self, addr: u64) bool {
         if self.kind != PT_LOAD or addr < self.vaddr {
             return false;
         }
@@ -150,7 +150,7 @@ extend ProgramHeader {
         addr < end
     }
 
-    pub fn file_offset_for(&self, addr: u64) u64 {
+    pub(super) fn file_offset_for(&self, addr: u64) u64 {
         self.offset + (addr - self.vaddr)
     }
 }
@@ -158,7 +158,7 @@ extend ProgramHeader {
 extend SectionHeader {
     // Empty section headers are used for fixed-array initialization and as
     // out-parameters when a lookup may fail.
-    pub fn empty() SectionHeader {
+    pub(super) fn empty() SectionHeader {
         {
             name: 0,
             kind: 0,
@@ -173,7 +173,7 @@ extend SectionHeader {
         }
     }
 
-    pub fn contains_addr(&self, addr: u64) bool {
+    pub(super) fn contains_addr(&self, addr: u64) bool {
         if (self.flags & SHF_ALLOC) == 0 or self.addr == 0 or addr < self.addr {
             return false;
         }
@@ -184,11 +184,11 @@ extend SectionHeader {
         addr < end
     }
 
-    pub fn is_symbol_table(&self) bool {
+    pub(super) fn is_symbol_table(&self) bool {
         self.kind == SHT_DYNSYM or self.kind == SHT_SYMTAB
     }
 
-    pub fn is_relocation_table(&self) bool {
+    pub(super) fn is_relocation_table(&self) bool {
         self.kind == SHT_REL or self.kind == SHT_RELA
     }
 }
@@ -196,7 +196,7 @@ extend SectionHeader {
 extend ElfFile {
     // Keep the fixed section-array construction in the defining module. This is
     // also the natural owner of ElfFile's storage policy.
-    pub fn empty(header: ElfHeader, empty: &[u8]) ElfFile {
+    pub(super) fn empty(header: ElfHeader, empty: &[u8]) ElfFile {
         {
             header: header,
             sections: [SectionHeader::empty(); MAX_SECTIONS],
@@ -209,11 +209,11 @@ extend ElfFile {
 
 extend SymbolInfo {
     // ELF packs binding and type into st_info; this tool only cares about type.
-    pub fn kind(&self) u8 {
+    pub(super) fn kind(&self) u8 {
         self.info & 0x0f
     }
 
-    pub fn print_kind_name(&self, out: &mut Output) process::ExitCode!void {
+    pub(super) fn print_kind_name(&self, out: &mut output::Output) process::ExitCode!void {
         switch self.kind() {
             STT_OBJECT => out.write(b"OBJECT"),
             STT_FUNC => out.write(b"FUNC  "),
@@ -222,7 +222,7 @@ extend SymbolInfo {
         !{}
     }
 
-    pub fn print_kind_name_from(out: &mut Output, kind: u8) process::ExitCode!void {
+    pub(super) fn print_kind_name_from(out: &mut output::Output, kind: u8) process::ExitCode!void {
         switch kind {
             STT_OBJECT => out.write(b"OBJECT"),
             STT_FUNC => out.write(b"FUNC"),
@@ -231,11 +231,11 @@ extend SymbolInfo {
         !{}
     }
 
-    pub fn printable(&self) bool {
+    pub(super) fn printable(&self) bool {
         self.kind() == STT_FUNC or self.kind() == STT_OBJECT
     }
 
-    pub fn contains_addr(&self, addr: u64) bool {
+    pub(super) fn contains_addr(&self, addr: u64) bool {
         if self.value == 0 or self.size == 0 or addr < self.value {
             return false;
         }
@@ -246,7 +246,7 @@ extend SymbolInfo {
         addr < end
     }
 
-    pub fn before_or_at(&self, addr: u64) bool {
+    pub(super) fn before_or_at(&self, addr: u64) bool {
         self.value != 0 and self.value <= addr
     }
 }
@@ -254,14 +254,14 @@ extend SymbolInfo {
 extend RelocationInfo {
     // r_info packs relocation type and symbol index. ELF32 uses 8 low bits for
     // type; ELF64 uses 32 low bits.
-    pub fn kind(&self, class: u8) u32 {
+    pub(super) fn kind(&self, class: u8) u32 {
         if class == ELFCLASS32 {
             return (self.info & 0xff) as u32;
         }
         (self.info & 0xffffffff) as u32
     }
 
-    pub fn symbol_index(&self, class: u8) u64 {
+    pub(super) fn symbol_index(&self, class: u8) u64 {
         if class == ELFCLASS32 {
             return self.info >> 8;
         }

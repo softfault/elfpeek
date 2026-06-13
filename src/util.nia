@@ -1,9 +1,9 @@
 using std::math;
 using std::process;
 
-using root::output::Output;
+using super::output;
 
-pub struct ByteRange {
+pub(package) struct ByteRange {
     start: usize,
     end: usize,
 }
@@ -11,7 +11,7 @@ pub struct ByteRange {
 // ELF offsets and sizes are file-domain u64 values, while slices need usize
 // bounds. Keep the conversion in one checked helper so callers cannot forget the
 // overflow and end <= len parts of validation.
-pub fn file_range(buf_len: usize, offset: u64, size: u64) ?ByteRange {
+pub(package) fn file_range(buf_len: usize, offset: u64, size: u64) ?ByteRange {
     let end64 = switch offset.checked_add(size) {
         ?value => value,
         null => return null,
@@ -28,7 +28,7 @@ pub fn file_range(buf_len: usize, offset: u64, size: u64) ?ByteRange {
 // ELF tables are described by a base offset, fixed entry size, and entry index.
 // Both index * entsize and base + relative can overflow in corrupt files, so the
 // parser asks for a checked entry offset before calling the raw field readers.
-pub fn table_entry_offset(table_offset: u64, index: u64, entsize: u64, buf_len: usize) ?usize {
+pub(package) fn table_entry_offset(table_offset: u64, index: u64, entsize: u64, buf_len: usize) ?usize {
     let relative = switch index.checked_mul(entsize) {
         ?value => value,
         null => return null,
@@ -45,37 +45,37 @@ pub fn table_entry_offset(table_offset: u64, index: u64, entsize: u64, buf_len: 
 
 // These readers intentionally take an explicit endian flag at the call site.
 // ELF files can be little or big endian independent of the host machine.
-pub fn read_u16_le(buf: &[u8], off: usize) u16 {
+pub(package) fn read_u16_le(buf: &[u8], off: usize) u16 {
     buf[off] as u16 | (buf[off + 1] as u16 << 8)
 }
 
-pub fn read_u32_le(buf: &[u8], off: usize) u32 {
+pub(package) fn read_u32_le(buf: &[u8], off: usize) u32 {
     buf[off] as u32 |
         (buf[off + 1] as u32 << 8) |
         (buf[off + 2] as u32 << 16) |
         (buf[off + 3] as u32 << 24)
 }
 
-pub fn read_u64_le(buf: &[u8], off: usize) u64 {
+pub(package) fn read_u64_le(buf: &[u8], off: usize) u64 {
     read_u32_le(buf, off) as u64 | (read_u32_le(buf, off + 4) as u64 << 32)
 }
 
-pub fn read_u16_be(buf: &[u8], off: usize) u16 {
+pub(package) fn read_u16_be(buf: &[u8], off: usize) u16 {
     (buf[off] as u16 << 8) | buf[off + 1] as u16
 }
 
-pub fn read_u32_be(buf: &[u8], off: usize) u32 {
+pub(package) fn read_u32_be(buf: &[u8], off: usize) u32 {
     (buf[off] as u32 << 24) |
         (buf[off + 1] as u32 << 16) |
         (buf[off + 2] as u32 << 8) |
         buf[off + 3] as u32
 }
 
-pub fn read_u64_be(buf: &[u8], off: usize) u64 {
+pub(package) fn read_u64_be(buf: &[u8], off: usize) u64 {
     (read_u32_be(buf, off) as u64 << 32) | read_u32_be(buf, off + 4) as u64
 }
 
-pub fn read_u16(buf: &[u8], off: usize, little: bool) u16 {
+pub(package) fn read_u16(buf: &[u8], off: usize, little: bool) u16 {
     if little {
         read_u16_le(buf, off)
     } else {
@@ -83,7 +83,7 @@ pub fn read_u16(buf: &[u8], off: usize, little: bool) u16 {
     }
 }
 
-pub fn read_u32(buf: &[u8], off: usize, little: bool) u32 {
+pub(package) fn read_u32(buf: &[u8], off: usize, little: bool) u32 {
     if little {
         read_u32_le(buf, off)
     } else {
@@ -91,7 +91,7 @@ pub fn read_u32(buf: &[u8], off: usize, little: bool) u32 {
     }
 }
 
-pub fn read_u64(buf: &[u8], off: usize, little: bool) u64 {
+pub(package) fn read_u64(buf: &[u8], off: usize, little: bool) u64 {
     if little {
         read_u64_le(buf, off)
     } else {
@@ -99,7 +99,7 @@ pub fn read_u64(buf: &[u8], off: usize, little: bool) u64 {
     }
 }
 
-pub fn bytes_eq(a: &[u8], b: &[u8]) bool {
+pub(package) fn bytes_eq(a: &[u8], b: &[u8]) bool {
     if a.len() != b.len() {
         return false;
     }
@@ -115,21 +115,21 @@ pub fn bytes_eq(a: &[u8], b: &[u8]) bool {
 
 // Dump targets beginning with '@' are interpreted as raw file offsets instead
 // of section names, for example '@0x1000'.
-pub fn starts_with_at(text: &[u8]) bool {
+pub(package) fn starts_with_at(text: &[u8]) bool {
     text.len() != 0 and text[0] == b'@'
 }
 
-pub fn after_at(text: &[u8]) &[u8] {
+pub(package) fn after_at(text: &[u8]) &[u8] {
     &text[1..text.len()]
 }
 
-pub fn is_printable_byte(ch: u8) bool {
+pub(package) fn is_printable_byte(ch: u8) bool {
     (ch >= 0x20 and ch < 0x7f) or ch == b'\t'
 }
 
 // Hex dumps show printable bytes literally and all other bytes as dots, which
 // matches the conventional hexdump layout.
-pub fn print_byte_ascii(out: &mut Output, ch: u8) process::ExitCode!void {
+pub(package) fn print_byte_ascii(out: &mut output::Output, ch: u8) process::ExitCode!void {
     if ch >= 0x20 and ch < 0x7f {
         out.byte(ch).?;
     } else {
@@ -138,7 +138,7 @@ pub fn print_byte_ascii(out: &mut Output, ch: u8) process::ExitCode!void {
     !{}
 }
 
-pub fn print_string_bytes(out: &mut Output, buf: &[u8], start: usize, end: usize) process::ExitCode!void {
+pub(package) fn print_string_bytes(out: &mut output::Output, buf: &[u8], start: usize, end: usize) process::ExitCode!void {
     var i = start;
     while i < end {
         out.byte(buf[i]).?;

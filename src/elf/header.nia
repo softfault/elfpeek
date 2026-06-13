@@ -1,12 +1,11 @@
 using std::CStr;
 using std::fmt;
 using std::process;
-using root::output::Output;
-using root::util::*;
-using super::types::*;
+using root::{output, util};
+using super::types;
 
 // Small name mappers keep printing code readable without introducing storage.
-fn print_class(out: &mut Output, class: u8) process::ExitCode!void {
+fn print_class(out: &mut output::Output, class: u8) process::ExitCode!void {
     var text = switch class {
         1 => CStr::from_ptr(c"ELF32"),
         2 => CStr::from_ptr(c"ELF64"),
@@ -18,7 +17,7 @@ fn print_class(out: &mut Output, class: u8) process::ExitCode!void {
     !{}
 }
 
-fn print_endian(out: &mut Output, data: u8) process::ExitCode!void {
+fn print_endian(out: &mut output::Output, data: u8) process::ExitCode!void {
     var text = switch data {
         1 => CStr::from_ptr(c"little"),
         2 => CStr::from_ptr(c"big"),
@@ -30,7 +29,7 @@ fn print_endian(out: &mut Output, data: u8) process::ExitCode!void {
     !{}
 }
 
-fn print_osabi(out: &mut Output, osabi: u8) process::ExitCode!void {
+fn print_osabi(out: &mut output::Output, osabi: u8) process::ExitCode!void {
     var text = switch osabi {
         0 => CStr::from_ptr(c"System V"),
         3 => CStr::from_ptr(c"Linux"),
@@ -46,7 +45,7 @@ fn print_osabi(out: &mut Output, osabi: u8) process::ExitCode!void {
     !{}
 }
 
-fn print_elf_type(out: &mut Output, kind: u16) process::ExitCode!void {
+fn print_elf_type(out: &mut output::Output, kind: u16) process::ExitCode!void {
     var text = switch kind {
         0 => CStr::from_ptr(c"NONE"),
         1 => CStr::from_ptr(c"REL"),
@@ -62,7 +61,7 @@ fn print_elf_type(out: &mut Output, kind: u16) process::ExitCode!void {
     !{}
 }
 
-fn print_machine(out: &mut Output, machine: u16) process::ExitCode!void {
+fn print_machine(out: &mut output::Output, machine: u16) process::ExitCode!void {
     var text = switch machine {
         3 => CStr::from_ptr(c"x86"),
         8 => CStr::from_ptr(c"MIPS"),
@@ -80,19 +79,19 @@ fn print_machine(out: &mut Output, machine: u16) process::ExitCode!void {
     !{}
 }
 
-extend ElfHeader {
+extend types::ElfHeader {
     // Read e_ident plus the ELF header. ELF32 and ELF64 place later fields at
     // different offsets, but both are normalized into ElfHeader.
-    pub fn read(buf: &[u8], class: u8, data: u8, little: bool) ElfHeader {
-        var header: ElfHeader = {
+    pub(super) fn read(buf: &[u8], class: u8, data: u8, little: bool) types::ElfHeader {
+        var header: types::ElfHeader = {
             class: class,
             data: data,
             ident_version: buf[6],
             osabi: buf[7],
             little: little,
-            kind: read_u16(buf, 16, little),
-            machine: read_u16(buf, 18, little),
-            elf_version: read_u32(buf, 20, little),
+            kind: util::read_u16(buf, 16, little),
+            machine: util::read_u16(buf, 18, little),
+            elf_version: util::read_u32(buf, 20, little),
             entry: 0,
             phoff: 0,
             shoff: 0,
@@ -105,36 +104,36 @@ extend ElfHeader {
             shstrndx: 0,
         };
 
-        if class == ELFCLASS32 {
+        if class == types::ELFCLASS32 {
             // ELF32 stores offsets and addresses as 32-bit words.
-            header.entry = read_u32(buf, 24, little) as u64;
-            header.phoff = read_u32(buf, 28, little) as u64;
-            header.shoff = read_u32(buf, 32, little) as u64;
-            header.flags = read_u32(buf, 36, little);
-            header.ehsize = read_u16(buf, 40, little);
-            header.phentsize = read_u16(buf, 42, little);
-            header.phnum = read_u16(buf, 44, little);
-            header.shentsize = read_u16(buf, 46, little);
-            header.shnum = read_u16(buf, 48, little);
-            header.shstrndx = read_u16(buf, 50, little);
+            header.entry = util::read_u32(buf, 24, little) as u64;
+            header.phoff = util::read_u32(buf, 28, little) as u64;
+            header.shoff = util::read_u32(buf, 32, little) as u64;
+            header.flags = util::read_u32(buf, 36, little);
+            header.ehsize = util::read_u16(buf, 40, little);
+            header.phentsize = util::read_u16(buf, 42, little);
+            header.phnum = util::read_u16(buf, 44, little);
+            header.shentsize = util::read_u16(buf, 46, little);
+            header.shnum = util::read_u16(buf, 48, little);
+            header.shstrndx = util::read_u16(buf, 50, little);
         } else {
             // ELF64 widens the header and moves the section/program metadata.
-            header.entry = read_u64(buf, 24, little);
-            header.phoff = read_u64(buf, 32, little);
-            header.shoff = read_u64(buf, 40, little);
-            header.flags = read_u32(buf, 48, little);
-            header.ehsize = read_u16(buf, 52, little);
-            header.phentsize = read_u16(buf, 54, little);
-            header.phnum = read_u16(buf, 56, little);
-            header.shentsize = read_u16(buf, 58, little);
-            header.shnum = read_u16(buf, 60, little);
-            header.shstrndx = read_u16(buf, 62, little);
+            header.entry = util::read_u64(buf, 24, little);
+            header.phoff = util::read_u64(buf, 32, little);
+            header.shoff = util::read_u64(buf, 40, little);
+            header.flags = util::read_u32(buf, 48, little);
+            header.ehsize = util::read_u16(buf, 52, little);
+            header.phentsize = util::read_u16(buf, 54, little);
+            header.phnum = util::read_u16(buf, 56, little);
+            header.shentsize = util::read_u16(buf, 58, little);
+            header.shnum = util::read_u16(buf, 60, little);
+            header.shstrndx = util::read_u16(buf, 62, little);
         }
 
         header
     }
 
-    pub fn print(&self, out: &mut Output) process::ExitCode!void {
+    pub(super) fn print(&self, out: &mut output::Output) process::ExitCode!void {
         out.write(b"ELF header\n").?;
         print_class(out, self.class).?;
         print_endian(out, self.data).?;
@@ -162,34 +161,34 @@ extend ElfHeader {
     }
 }
 
-extend ProgramHeader {
+extend types::ProgramHeader {
     // Program header layout also differs between ELF32 and ELF64. In ELF32,
     // p_flags appears later; in ELF64 it is the second field.
-    pub fn read(buf: &[u8], class: u8, off: usize, little: bool) ProgramHeader {
-        if class == ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) types::ProgramHeader {
+        if class == types::ELFCLASS32 {
             return {
-                kind: read_u32(buf, off, little),
-                flags: read_u32(buf, off + 24, little),
-                offset: read_u32(buf, off + 4, little) as u64,
-                vaddr: read_u32(buf, off + 8, little) as u64,
-                filesz: read_u32(buf, off + 16, little) as u64,
-                memsz: read_u32(buf, off + 20, little) as u64,
-                align: read_u32(buf, off + 28, little) as u64,
+                kind: util::read_u32(buf, off, little),
+                flags: util::read_u32(buf, off + 24, little),
+                offset: util::read_u32(buf, off + 4, little) as u64,
+                vaddr: util::read_u32(buf, off + 8, little) as u64,
+                filesz: util::read_u32(buf, off + 16, little) as u64,
+                memsz: util::read_u32(buf, off + 20, little) as u64,
+                align: util::read_u32(buf, off + 28, little) as u64,
             };
         }
 
         {
-            kind: read_u32(buf, off, little),
-            flags: read_u32(buf, off + 4, little),
-            offset: read_u64(buf, off + 8, little),
-            vaddr: read_u64(buf, off + 16, little),
-            filesz: read_u64(buf, off + 32, little),
-            memsz: read_u64(buf, off + 40, little),
-            align: read_u64(buf, off + 48, little),
+            kind: util::read_u32(buf, off, little),
+            flags: util::read_u32(buf, off + 4, little),
+            offset: util::read_u64(buf, off + 8, little),
+            vaddr: util::read_u64(buf, off + 16, little),
+            filesz: util::read_u64(buf, off + 32, little),
+            memsz: util::read_u64(buf, off + 40, little),
+            align: util::read_u64(buf, off + 48, little),
         }
     }
 
-    pub fn print_name(&self, out: &mut Output) process::ExitCode!void {
+    pub(super) fn print_name(&self, out: &mut output::Output) process::ExitCode!void {
         // Include common GNU OS-specific segment types because they show up in
         // normal Linux binaries and are useful in summary output.
         switch self.kind {
@@ -210,15 +209,15 @@ extend ProgramHeader {
         !{}
     }
 
-    pub fn print_flags(&self, out: &mut Output) process::ExitCode!void {
+    pub(super) fn print_flags(&self, out: &mut output::Output) process::ExitCode!void {
         // Print fixed-width RWX columns so program and section output align.
-        out.byte(if (self.flags & PF_R) != 0 { b'R' } else { b' ' }).?;
-        out.byte(if (self.flags & PF_W) != 0 { b'W' } else { b' ' }).?;
-        out.byte(if (self.flags & PF_X) != 0 { b'X' } else { b' ' }).?;
+        out.byte(if (self.flags & types::PF_R) != 0 { b'R' } else { b' ' }).?;
+        out.byte(if (self.flags & types::PF_W) != 0 { b'W' } else { b' ' }).?;
+        out.byte(if (self.flags & types::PF_X) != 0 { b'X' } else { b' ' }).?;
         !{}
     }
 
-    pub fn print(&self, out: &mut Output, index: u16) process::ExitCode!void {
+    pub(super) fn print(&self, out: &mut output::Output, index: u16) process::ExitCode!void {
         out.write(b"  ").?;
         out.print("{:<2} ", [&index]).?;
         self.print_name(out).?;

@@ -9,7 +9,7 @@ using std::process;
 using super::command;
 using super::output;
 using super::util;
-using self::types;
+using self::types::{ElfFile, ElfHeader, ProgramHeader};
 
 // Public helper used by main before the full ELF parser is entered.
 pub(package) fn print_small_ident_error(out: &mut output::Output) process::ExitCode!void {
@@ -48,7 +48,7 @@ fn print_program_headers(
             },
         };
 
-        var ph = types::ProgramHeader::read(buf, class, off, little);
+        var ph = ProgramHeader::read(buf, class, off, little);
         ph.print(out, i).?;
         i += 1;
     }
@@ -104,8 +104,8 @@ pub(package) fn inspect_bytes(out: &mut output::Output, buf: &[u8], size: usize,
     // From this point on the parser keeps borrowed views into `buf`. The caller
     // owns that buffer for the whole inspection, so section and string-table
     // slices can stay allocation-free.
-    var header = types::ElfHeader::read(buf, class, data, little);
-    var elf = types::ElfFile::read(buf, header);
+    var header = ElfHeader::read(buf, class, data, little);
+    var elf = ElfFile::read(buf, header);
 
     // Single-purpose subcommands return early so summary-only work is skipped.
     switch cli.mode {

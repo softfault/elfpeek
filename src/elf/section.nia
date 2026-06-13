@@ -3,13 +3,13 @@ using std::fmt;
 using std::math;
 using std::process;
 using root::{output, util};
-using super::types;
+using super::types::{ELFCLASS32, ElfFile, ElfHeader, MAX_SECTIONS, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE, SectionHeader, cstr_at};
 
-extend types::SectionHeader {
+extend SectionHeader {
     // Read one section header and normalize ELF32 fields into the ELF64-sized
     // SectionHeader representation.
-    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) types::SectionHeader {
-        if class == types::ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) SectionHeader {
+        if class == ELFCLASS32 {
             return {
                 name: util::read_u32(buf, off, little),
                 kind: util::read_u32(buf, off + 4, little),
@@ -63,9 +63,9 @@ extend types::SectionHeader {
     }
 
     fn print_flags(&self, out: &mut output::Output) process::ExitCode!void {
-        out.byte(if (self.flags & types::SHF_WRITE) != 0 { b'W' } else { b' ' }).?;
-        out.byte(if (self.flags & types::SHF_ALLOC) != 0 { b'A' } else { b' ' }).?;
-        out.byte(if (self.flags & types::SHF_EXECINSTR) != 0 { b'X' } else { b' ' }).?;
+        out.byte(if (self.flags & SHF_WRITE) != 0 { b'W' } else { b' ' }).?;
+        out.byte(if (self.flags & SHF_ALLOC) != 0 { b'A' } else { b' ' }).?;
+        out.byte(if (self.flags & SHF_EXECINSTR) != 0 { b'X' } else { b' ' }).?;
         !{}
     }
 
@@ -73,7 +73,7 @@ extend types::SectionHeader {
         out.write(b"  ").?;
         out.print("{:<2} ", [&index]).?;
         var name = CStr::from_ptr(c"");
-        if types::cstr_at(names, self.name, &mut name) {
+        if cstr_at(names, self.name, &mut name) {
             out.print("{:<18} ", [&name]).?;
         } else {
             out.write(b"                   ").?;
@@ -94,7 +94,7 @@ extend types::SectionHeader {
     }
 }
 
-extend types::ElfFile {
+extend ElfFile {
     fn parse_u64_bytes(text: &[u8]) ?u64 {
         switch fmt::parse[u64](text) {
             !value => ?value,
@@ -106,14 +106,14 @@ extend types::ElfFile {
     // on demand, but section headers are used by dumps, string extraction,
     // symbol lookup, and relocation decoding. The fixed array keeps the example
     // allocation-free after the input file buffer is loaded.
-    pub(super) fn read(buf: &[u8], header: types::ElfHeader) types::ElfFile {
-        var file = types::ElfFile::empty(header, &buf[0..0]);
+    pub(super) fn read(buf: &[u8], header: ElfHeader) ElfFile {
+        var file = ElfFile::empty(header, &buf[0..0]);
 
         // Clamp section count to the fixed storage capacity. This keeps memory
         // explicit and avoids allocating based on untrusted file metadata.
         var count = header.shnum;
-        if count as usize > types::MAX_SECTIONS {
-            count = types::MAX_SECTIONS as u16;
+        if count as usize > MAX_SECTIONS {
+            count = MAX_SECTIONS as u16;
         }
         file.section_count = count;
 
@@ -127,7 +127,7 @@ extend types::ElfFile {
                 },
             };
             file.sections[i as usize] =
-                types::SectionHeader::read(buf, header.class, off, header.little);
+                SectionHeader::read(buf, header.class, off, header.little);
             i += 1;
         }
 
@@ -172,7 +172,7 @@ extend types::ElfFile {
         !{}
     }
 
-    pub(super) fn section_bytes(&self, buf: &[u8], section: &types::SectionHeader) ?&[u8] {
+    pub(super) fn section_bytes(&self, buf: &[u8], section: &SectionHeader) ?&[u8] {
         // NOBITS sections such as .bss may not have backing file bytes. Any
         // invalid range is represented explicitly instead of being disguised as
         // an empty slice.
@@ -182,13 +182,13 @@ extend types::ElfFile {
         }
     }
 
-    pub(super) fn find_section(&self, name: CStr, section_out: &mut types::SectionHeader) bool {
+    pub(super) fn find_section(&self, name: CStr, section_out: &mut SectionHeader) bool {
         // Section names are ELF string-table bytes, not owned Nia text. Compare
         // C-string byte views directly and keep the lookup allocation-free.
         var i: u16 = 0;
         while i < self.section_count {
             var section_name = CStr::from_ptr(c"");
-            if types::cstr_at(self.shstrtab, self.sections[i as usize].name, &mut section_name) and util::bytes_eq(section_name.bytes(), name.bytes()) {
+            if cstr_at(self.shstrtab, self.sections[i as usize].name, &mut section_name) and util::bytes_eq(section_name.bytes(), name.bytes()) {
                 section_out.* = self.sections[i as usize];
                 return true;
             }
@@ -269,7 +269,7 @@ extend types::ElfFile {
             return self.dump_range(out, buf, offset, wanted_len);
         }
 
-        var section = types::SectionHeader::empty();
+        var section = SectionHeader::empty();
         if not self.find_section(target, &mut section) {
             out.err(b"error: section '").?;
             out.err_cstr(target).?;
@@ -285,7 +285,7 @@ extend types::ElfFile {
     }
 
     pub(super) fn print_strings_from(&self, out: &mut output::Output, buf: &[u8], section_name: CStr, min_len: usize) process::ExitCode!i32 {
-        var section = types::SectionHeader::empty();
+        var section = SectionHeader::empty();
         if not self.find_section(section_name, &mut section) {
             out.err(b"error: section '").?;
             out.err_cstr(section_name).?;

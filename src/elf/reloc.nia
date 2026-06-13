@@ -2,13 +2,13 @@ using std::CStr;
 using std::fmt;
 using std::process;
 using root::{output, util};
-using super::types;
+using super::types::{ELFCLASS32, ElfFile, RelocationInfo, SHT_RELA, SectionHeader, print_cstr_at};
 
-extend types::RelocationInfo {
+extend RelocationInfo {
     // Read REL or RELA entries. RELA carries an explicit addend; REL leaves it
     // in the relocated location, so this tool prints zero for REL addends.
-    pub(super) fn read(buf: &[u8], class: u8, off: usize, rela: bool, little: bool) types::RelocationInfo {
-        if class == types::ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, rela: bool, little: bool) RelocationInfo {
+        if class == ELFCLASS32 {
             var info32 = util::read_u32(buf, off + 4, little) as u64;
             var addend32: u64 = 0;
             if rela {
@@ -35,7 +35,7 @@ extend types::RelocationInfo {
     }
 }
 
-extend types::ElfFile {
+extend ElfFile {
     // Walk all relocation sections and print their decoded type, symbol index,
     // optional addend, and symbol name when the linked symbol table is present.
     // RELA stores the addend in the entry; REL only stores offset/info, so this
@@ -51,12 +51,12 @@ extend types::ElfFile {
                 continue;
             }
 
-            var rela = relsec.kind == types::SHT_RELA;
+            var rela = relsec.kind == SHT_RELA;
             var entsize = relsec.entsize;
             if entsize == 0 {
                 // Some malformed or minimal files may omit sh_entsize. Fall
                 // back to the ABI sizes so useful data can still be printed.
-                entsize = if self.header.class == types::ELFCLASS32 {
+                entsize = if self.header.class == ELFCLASS32 {
                     if rela { 12 } else { 8 }
                 } else {
                     if rela { 24 } else { 16 }
@@ -76,7 +76,7 @@ extend types::ElfFile {
                 },
             };
 
-            var symtab = types::SectionHeader::empty();
+            var symtab = SectionHeader::empty();
             var has_symtab = false;
             if relsec.link < self.section_count as u32 {
                 // sh_link of a relocation section usually names the symbol table
@@ -93,7 +93,7 @@ extend types::ElfFile {
             }
 
             out.write(b"\nRelocations from ").?;
-            types::print_cstr_at(out, self.shstrtab, relsec.name).?;
+            print_cstr_at(out, self.shstrtab, relsec.name).?;
             out.write(b" (").?;
             out.print("{} entries)\n", [&count]).?;
             found = true;
@@ -105,7 +105,7 @@ extend types::ElfFile {
                     null => break,
                 };
 
-                var rel = types::RelocationInfo::read(
+                var rel = RelocationInfo::read(
                     buf,
                     self.header.class,
                     off,

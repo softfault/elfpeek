@@ -2,7 +2,7 @@ using std::CStr;
 using std::fmt;
 using std::process;
 using root::{output, util};
-using super::types;
+using super::types::{ELFCLASS32, ElfHeader, PF_R, PF_W, PF_X, ProgramHeader};
 
 // Small name mappers keep printing code readable without introducing storage.
 fn print_class(out: &mut output::Output, class: u8) process::ExitCode!void {
@@ -79,11 +79,11 @@ fn print_machine(out: &mut output::Output, machine: u16) process::ExitCode!void 
     !{}
 }
 
-extend types::ElfHeader {
+extend ElfHeader {
     // Read e_ident plus the ELF header. ELF32 and ELF64 place later fields at
     // different offsets, but both are normalized into ElfHeader.
-    pub(super) fn read(buf: &[u8], class: u8, data: u8, little: bool) types::ElfHeader {
-        var header: types::ElfHeader = {
+    pub(super) fn read(buf: &[u8], class: u8, data: u8, little: bool) ElfHeader {
+        var header: ElfHeader = {
             class: class,
             data: data,
             ident_version: buf[6],
@@ -104,7 +104,7 @@ extend types::ElfHeader {
             shstrndx: 0,
         };
 
-        if class == types::ELFCLASS32 {
+        if class == ELFCLASS32 {
             // ELF32 stores offsets and addresses as 32-bit words.
             header.entry = util::read_u32(buf, 24, little) as u64;
             header.phoff = util::read_u32(buf, 28, little) as u64;
@@ -161,11 +161,11 @@ extend types::ElfHeader {
     }
 }
 
-extend types::ProgramHeader {
+extend ProgramHeader {
     // Program header layout also differs between ELF32 and ELF64. In ELF32,
     // p_flags appears later; in ELF64 it is the second field.
-    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) types::ProgramHeader {
-        if class == types::ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) ProgramHeader {
+        if class == ELFCLASS32 {
             return {
                 kind: util::read_u32(buf, off, little),
                 flags: util::read_u32(buf, off + 24, little),
@@ -211,9 +211,9 @@ extend types::ProgramHeader {
 
     pub(super) fn print_flags(&self, out: &mut output::Output) process::ExitCode!void {
         // Print fixed-width RWX columns so program and section output align.
-        out.byte(if (self.flags & types::PF_R) != 0 { b'R' } else { b' ' }).?;
-        out.byte(if (self.flags & types::PF_W) != 0 { b'W' } else { b' ' }).?;
-        out.byte(if (self.flags & types::PF_X) != 0 { b'X' } else { b' ' }).?;
+        out.byte(if (self.flags & PF_R) != 0 { b'R' } else { b' ' }).?;
+        out.byte(if (self.flags & PF_W) != 0 { b'W' } else { b' ' }).?;
+        out.byte(if (self.flags & PF_X) != 0 { b'X' } else { b' ' }).?;
         !{}
     }
 

@@ -3,13 +3,23 @@ using std::fmt;
 using std::math;
 using std::process;
 using root::{output, util};
-using super::types;
+using super::types::{
+    ELFCLASS32,
+    ElfFile,
+    ProgramHeader,
+    SHT_DYNSYM,
+    SHT_SYMTAB,
+    SectionHeader,
+    SymbolInfo,
+    cstr_at,
+    print_cstr_at,
+};
 
-extend types::SymbolInfo {
+extend SymbolInfo {
     // Read one symbol table entry. ELF32 stores name/value/size first, while
     // ELF64 puts info and section index before value/size.
-    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) types::SymbolInfo {
-        if class == types::ELFCLASS32 {
+    pub(super) fn read(buf: &[u8], class: u8, off: usize, little: bool) SymbolInfo {
+        if class == ELFCLASS32 {
             return {
                 name: util::read_u32(buf, off, little),
                 value: util::read_u32(buf, off + 4, little) as u64,
@@ -29,14 +39,14 @@ extend types::SymbolInfo {
     }
 }
 
-extend types::ElfFile {
+extend ElfFile {
     // Resolve a relocation's symbol index back to a printable name. In ELF,
     // sh_link on a symbol table names the string table, and each symbol's st_name
     // is an offset into that linked table.
     pub(super) fn symbol_name_at(
         &self,
         buf: &[u8],
-        symtab: &types::SectionHeader,
+        symtab: &SectionHeader,
         index: u64,
         out: &mut CStr,
     ) bool {
@@ -61,11 +71,11 @@ extend types::ElfFile {
             null => return false,
         };
 
-        var sym = types::SymbolInfo::read(buf, self.header.class, off, self.header.little);
-        types::cstr_at(strtab, sym.name, out)
+        var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
+        cstr_at(strtab, sym.name, out)
     }
 
-    fn print_symbols_for(&self, out: &mut output::Output, buf: &[u8], symtab: &types::SectionHeader, title: &[u8]) process::ExitCode!void {
+    fn print_symbols_for(&self, out: &mut output::Output, buf: &[u8], symtab: &SectionHeader, title: &[u8]) process::ExitCode!void {
         // sh_link of a symbol table points to the string table containing names.
         // The symbol table's own range is walked by entry index; the string table
         // is only used after each st_name has been validated by cstr_at.
@@ -88,12 +98,12 @@ extend types::ElfFile {
                 ?value => value,
                 null => break,
             };
-            var sym = types::SymbolInfo::read(buf, self.header.class, off, self.header.little);
+            var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
             if sym.printable() {
                 out.print("  0x{:016x} ", [&sym.value]).?;
                 sym.print_kind_name(out).?;
                 out.print(" {:>5} ", [&sym.size]).?;
-                types::print_cstr_at(out, strtab, sym.name).?;
+                print_cstr_at(out, strtab, sym.name).?;
                 out.write(b"\n").?;
             }
             i += 1;
@@ -106,14 +116,14 @@ extend types::ElfFile {
         // print them before the full static symbol table when both exist.
         var i: u16 = 0;
         while i < self.section_count {
-            if self.sections[i as usize].kind == types::SHT_DYNSYM {
+            if self.sections[i as usize].kind == SHT_DYNSYM {
                 self.print_symbols_for(out, buf, &self.sections[i as usize], b"Dynamic symbols").?;
             }
             i += 1;
         }
         i = 0;
         while i < self.section_count {
-            if self.sections[i as usize].kind == types::SHT_SYMTAB {
+            if self.sections[i as usize].kind == SHT_SYMTAB {
                 self.print_symbols_for(out, buf, &self.sections[i as usize], b"Symbols").?;
             }
             i += 1;
@@ -134,7 +144,7 @@ extend types::ElfFile {
         // already the strongest match.
         var pass: u16 = 0;
         while pass < 2 {
-            var want_kind: u32 = if pass == 0 { types::SHT_SYMTAB } else { types::SHT_DYNSYM };
+            var want_kind: u32 = if pass == 0 { SHT_SYMTAB } else { SHT_DYNSYM };
 
             var si: u16 = 0;
             while si < self.section_count {
@@ -159,14 +169,14 @@ extend types::ElfFile {
                         ?value => value,
                         null => break,
                     };
-                    var sym = types::SymbolInfo::read(buf, self.header.class, off, self.header.little);
+                    var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
                     if not sym.printable() or not sym.before_or_at(addr) {
                         i += 1;
                         continue;
                     }
                     if sym.contains_addr(addr) or not found or sym.value > best_value {
                         var sym_name = CStr::from_ptr(c"");
-                        if types::cstr_at(strtab, sym.name, &mut sym_name) {
+                        if cstr_at(strtab, sym.name, &mut sym_name) {
                             found = true;
                             best_value = sym.value;
                             best_name = sym_name;
@@ -196,7 +206,7 @@ extend types::ElfFile {
                 out.write(b"+0x").?;
                 out.print("{:x} (", [&delta]).?;
             }
-            types::SymbolInfo::print_kind_name_from(out, best_kind).?;
+            SymbolInfo::print_kind_name_from(out, best_kind).?;
             if best_symtab {
                 out.write(b", SYMTAB)\n").?;
             } else {
@@ -222,7 +232,7 @@ extend types::ElfFile {
                 null => break,
             };
 
-            var ph = types::ProgramHeader::read(
+            var ph = ProgramHeader::read(
                 buf,
                 self.header.class,
                 off,
@@ -252,7 +262,7 @@ extend types::ElfFile {
             if self.sections[i as usize].contains_addr(addr) {
                 out.write(b"  Section  : [").?;
                 out.print("{}] ", [&i]).?;
-                types::print_cstr_at(out, self.shstrtab, self.sections[i as usize].name).?;
+                print_cstr_at(out, self.shstrtab, self.sections[i as usize].name).?;
                 out.write(b"\n").?;
                 found_section = true;
                 break;

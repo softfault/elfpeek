@@ -163,7 +163,10 @@ extend ElfFile {
         }
 
         out.write(b"\nSections\n").?;
-        out.write(b"  #  Name               Type       Flg Address            Offset     Size\n").?;
+        out.write(
+            b"  #  Name               Type       Flg Address"
+            b"            Offset     Size\n"
+        ).?;
         var i: u16 = 0;
         while i < self.section_count {
             self.sections[i as usize].print(out, i, self.shstrtab, self.entry_section).?;

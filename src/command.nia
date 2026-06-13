@@ -55,7 +55,12 @@ fn print_command_lines_stderr(out: &mut output::Output, prog: CStr) process::Exi
 
 // The full help is shown for no arguments and explicit help requests.
 pub(package) fn print_help(out: &mut output::Output, prog: CStr) process::ExitCode!i32 {
-    out.write(b"elfpeek - inspect ELF headers, sections, symbols, and relocations\n\nUsage:\n").?;
+    out.write(
+        b\\elfpeek - inspect ELF headers, sections, symbols, and relocations
+        \\
+        \\Usage:
+    ).?;
+    out.write(b"\n").?;
     print_command_lines(out, prog).?;
     out.write(
         b\\

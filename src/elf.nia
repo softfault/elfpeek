@@ -35,7 +35,10 @@ fn print_program_headers(
     }
 
     out.write(b"\nProgram headers\n").?;
-    out.write(b"  #  Type         Flg  Offset     VirtAddr           FileSiz    MemSiz     Align\n").?;
+    out.write(
+        b"  #  Type         Flg  Offset     VirtAddr"
+        b"           FileSiz    MemSiz     Align\n"
+    ).?;
 
     var i: u16 = 0;
     while i < phnum {

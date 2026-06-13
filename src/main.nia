@@ -104,7 +104,7 @@ fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::Ge
     };
 
     var read_buffer: [4096]u8 = [0; 4096];
-    var reader = file.reader(init.io(), &mut read_buffer[..]);
+    var reader = file.reader(init.io(), &mut read_buffer);
     switch reader.read_exact(bytes) {
         !ok => _ = ok,
         error! => {
@@ -240,7 +240,7 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
 pub fn main(init: Init) ExitCode!void {
     var stdout_buffer: [8192]u8 = [0; 8192];
     var stderr_buffer: [1024]u8 = [0; 1024];
-    var out = Output::init(init.io(), &mut stdout_buffer[..], &mut stderr_buffer[..]);
+    var out = Output::init(init.io(), &mut stdout_buffer, &mut stderr_buffer);
 
     var page = mem::PageAllocator::init();
     var gpa = mem::GeneralPurposeAllocator::init(&mut page);

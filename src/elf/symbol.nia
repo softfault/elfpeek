@@ -100,9 +100,9 @@ extend ElfFile {
             };
             var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
             if sym.printable() {
-                out.print("  0x{:016x} ", [&sym.value]).?;
+                out.print("  0x{:016x} ", &[&sym.value]).?;
                 sym.print_kind_name(out).?;
-                out.print(" {:>5} ", [&sym.size]).?;
+                out.print(" {:>5} ", &[&sym.size]).?;
                 print_cstr_at(out, strtab, sym.name).?;
                 out.write(b"\n").?;
             }
@@ -204,7 +204,7 @@ extend ElfFile {
                 out.write(b"  Symbol   : ").?;
                 out.cstr(best_name).?;
                 out.write(b"+0x").?;
-                out.print("{:x} (", [&delta]).?;
+                out.print("{:x} (", &[&delta]).?;
             }
             SymbolInfo::print_kind_name_from(out, best_kind).?;
             if best_symtab {
@@ -220,7 +220,7 @@ extend ElfFile {
 
     pub(super) fn resolve_addr(&self, out: &mut output::Output, buf: &[u8], addr: u64) process::ExitCode!void {
         out.write(b"\nAddress\n").?;
-        out.print("  Address  : 0x{:016x}\n", [&addr]).?;
+        out.print("  Address  : 0x{:016x}\n", &[&addr]).?;
 
         // First map virtual address to a LOAD segment and file offset. Sections
         // and symbols are useful names, but PT_LOAD is the executable mapping.
@@ -240,12 +240,12 @@ extend ElfFile {
             );
             if ph.contains_addr(addr) {
                 out.write(b"  Segment  : [").?;
-                out.print("{}] ", [&i]).?;
+                out.print("{}] ", &[&i]).?;
                 ph.print_name(out).?;
                 out.write(b" ").?;
                 ph.print_flags(out).?;
                 let file_off = ph.file_offset_for(addr);
-                out.print(" vaddr=0x{:016x}\n  File off : 0x{:08x}\n", [&ph.vaddr, &file_off]).?;
+                out.print(" vaddr=0x{:016x}\n  File off : 0x{:08x}\n", &[&ph.vaddr, &file_off]).?;
                 found_segment = true;
                 break;
             }
@@ -261,7 +261,7 @@ extend ElfFile {
         while i < self.section_count {
             if self.sections[i as usize].contains_addr(addr) {
                 out.write(b"  Section  : [").?;
-                out.print("{}] ", [&i]).?;
+                out.print("{}] ", &[&i]).?;
                 print_cstr_at(out, self.shstrtab, self.sections[i as usize].name).?;
                 out.write(b"\n").?;
                 found_section = true;

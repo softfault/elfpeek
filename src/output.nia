@@ -74,10 +74,10 @@ extend Output {
     }
 
     pub(package) fn cstr(&mut self, text: CStr) process::ExitCode!void {
-        self.print("{}", [&text])
+        self.print("{}", &[&text])
     }
 
     pub(package) fn err_cstr(&mut self, text: CStr) process::ExitCode!void {
-        self.err_print("{}", [&text])
+        self.err_print("{}", &[&text])
     }
 }

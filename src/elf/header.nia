@@ -41,7 +41,7 @@ fn print_osabi(out: &mut output::Output, osabi: u8) process::ExitCode!void {
     out.cstr(text).?;
     out.write(b" (").?;
     let osabi_value = osabi as u32;
-    out.print("{})\n", [&osabi_value]).?;
+    out.print("{})\n", &[&osabi_value]).?;
     !{}
 }
 
@@ -57,7 +57,7 @@ fn print_elf_type(out: &mut output::Output, kind: u16) process::ExitCode!void {
     out.write(b"  Type:                  ").?;
     out.cstr(text).?;
     out.write(b" (").?;
-    out.print("{})\n", [&kind]).?;
+    out.print("{})\n", &[&kind]).?;
     !{}
 }
 
@@ -75,7 +75,7 @@ fn print_machine(out: &mut output::Output, machine: u16) process::ExitCode!void 
     out.write(b"  Machine:               ").?;
     out.cstr(text).?;
     out.write(b" (").?;
-    out.print("{})\n", [&machine]).?;
+    out.print("{})\n", &[&machine]).?;
     !{}
 }
 
@@ -139,12 +139,12 @@ extend ElfHeader {
         print_endian(out, self.data).?;
         out.write(b"  Ident version:         ").?;
         let ident_version = self.ident_version as u32;
-        out.print("{}\n", [&ident_version]).?;
+        out.print("{}\n", &[&ident_version]).?;
         print_osabi(out, self.osabi).?;
         print_elf_type(out, self.kind).?;
         print_machine(out, self.machine).?;
         out.write(b"  ELF version:           ").?;
-        out.print("{}\n  Entry point:           0x{:x}\n  Program header offset: {}\n  Section header offset: {}\n  Flags:                 0x{:x}\n  ELF header size:       {}\n  Program headers:       {} entries, {} bytes each\n  Section headers:       {} entries, {} bytes each\n  Section name index:    {}\n", [
+        out.print("{}\n  Entry point:           0x{:x}\n  Program header offset: {}\n  Section header offset: {}\n  Flags:                 0x{:x}\n  ELF header size:       {}\n  Program headers:       {} entries, {} bytes each\n  Section headers:       {} entries, {} bytes each\n  Section name index:    {}\n", &[
             &self.elf_version,
             &self.entry,
             &self.phoff,
@@ -219,11 +219,11 @@ extend ProgramHeader {
 
     pub(super) fn print(&self, out: &mut output::Output, index: u16) process::ExitCode!void {
         out.write(b"  ").?;
-        out.print("{:<2} ", [&index]).?;
+        out.print("{:<2} ", &[&index]).?;
         self.print_name(out).?;
         out.write(b" ").?;
         self.print_flags(out).?;
-        out.print("  off=0x{:08x} vaddr=0x{:016x} filesz=0x{:08x} memsz=0x{:08x} align=0x{:x}\n", [
+        out.print("  off=0x{:08x} vaddr=0x{:016x} filesz=0x{:08x} memsz=0x{:08x} align=0x{:x}\n", &[
             &self.offset,
             &self.vaddr,
             &self.filesz,

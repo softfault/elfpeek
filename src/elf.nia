@@ -43,7 +43,7 @@ fn print_program_headers(
             ?value => value,
             null => {
                 out.write(b"  ").?;
-                out.print("{}  <truncated>\n", [&i]).?;
+                out.print("{}  <truncated>\n", &[&i]).?;
                 break;
             },
         };
@@ -78,7 +78,7 @@ pub(package) fn inspect_bytes(out: &mut output::Output, buf: &[u8], size: usize,
     if data != 1 and data != 2 {
         out.err(b"error: unsupported ELF data encoding ").?;
         let data_value = data as u32;
-        out.err_print("{}\n", [&data_value]).?;
+        out.err_print("{}\n", &[&data_value]).?;
         return !1;
     }
 
@@ -91,7 +91,7 @@ pub(package) fn inspect_bytes(out: &mut output::Output, buf: &[u8], size: usize,
         } else {
             out.err(b"error: unsupported ELF class ").?;
             let class_value = class as u32;
-            out.err_print("{}\n", [&class_value]).?;
+            out.err_print("{}\n", &[&class_value]).?;
             return !1;
         }
     }

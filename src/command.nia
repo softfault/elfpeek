@@ -60,9 +60,9 @@ pub(package) fn print_help(out: &mut output::Output, prog: CStr) process::ExitCo
     out.write(
         b"\nCommands:\n  summary                 Show headers, sections, and symbols\n  0xaddr                  Resolve a virtual address\n  dump .text 64           Dump bytes from a section\n  dump @0x1000 64         Dump bytes from a raw file offset\n  strings .rodata 4       Print printable strings from a section\n  relocs                  Print relocation entries\n\nDefaults:\n  dump length             "
     ).?;
-    out.print("{}", [&DEFAULT_DUMP_LEN]).?;
+    out.print("{}", &[&DEFAULT_DUMP_LEN]).?;
     out.write(b" bytes\n  strings section         .rodata\n  strings min length      ").?;
-    out.print("{}", [&DEFAULT_STRING_MIN]).?;
+    out.print("{}", &[&DEFAULT_STRING_MIN]).?;
     out.write(b" bytes\n").?;
     !0
 }

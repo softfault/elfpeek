@@ -71,17 +71,17 @@ extend SectionHeader {
 
     pub(super) fn print(&self, out: &mut output::Output, index: u16, names: &[u8], entry_section: i32) process::ExitCode!void {
         out.write(b"  ").?;
-        out.print("{:<2} ", [&index]).?;
+        out.print("{:<2} ", &[&index]).?;
         var name = CStr::from_ptr(c"");
         if cstr_at(names, self.name, &mut name) {
-            out.print("{:<18} ", [&name]).?;
+            out.print("{:<18} ", &[&name]).?;
         } else {
             out.write(b"                   ").?;
         }
         self.print_type_name(out).?;
         out.write(b" ").?;
         self.print_flags(out).?;
-        out.print(" addr=0x{:016x} off=0x{:08x} size=0x{:x}", [
+        out.print(" addr=0x{:016x} off=0x{:08x} size=0x{:x}", &[
             &self.addr,
             &self.offset,
             &self.size,
@@ -219,14 +219,14 @@ extend ElfFile {
         while row < len {
             var base = offset + row;
             out.write(b"  ").?;
-            out.print("{:08x}  ", [&base]).?;
+            out.print("{:08x}  ", &[&base]).?;
 
             var col: u64 = 0;
             while col < 16 {
                 var pos = row + col;
                 if pos < len {
                     let byte = buf[(offset + pos) as usize] as u32;
-                    out.print("{:02x} ", [&byte]).?;
+                    out.print("{:02x} ", &[&byte]).?;
                 } else {
                     out.write(b"   ").?;
                 }
@@ -312,7 +312,7 @@ extend ElfFile {
         out.write(b"\nStrings from ").?;
         out.cstr(section_name).?;
         out.write(b" (min ").?;
-        out.print("{} chars)\n", [&min_len]).?;
+        out.print("{} chars)\n", &[&min_len]).?;
 
         var count: usize = 0;
         var start: usize = 0;
@@ -333,7 +333,7 @@ extend ElfFile {
                     if len >= min_len {
                         out.write(b"  ").?;
                         let string_offset = section.offset + start as u64;
-                        out.print("{:08x}  ", [&string_offset]).?;
+                        out.print("{:08x}  ", &[&string_offset]).?;
                         util::print_string_bytes(out, bytes, start, i).?;
                         out.write(b"\n").?;
                         count += 1;
@@ -349,7 +349,7 @@ extend ElfFile {
             if len >= min_len {
                 out.write(b"  ").?;
                 let string_offset = section.offset + start as u64;
-                out.print("{:08x}  ", [&string_offset]).?;
+                out.print("{:08x}  ", &[&string_offset]).?;
                 util::print_string_bytes(out, bytes, start, bytes.len()).?;
                 out.write(b"\n").?;
                 count += 1;
@@ -357,7 +357,7 @@ extend ElfFile {
         }
 
         out.write(b"\n  ").?;
-        out.print("{} strings found\n", [&count]).?;
+        out.print("{} strings found\n", &[&count]).?;
         !0
     }
 }

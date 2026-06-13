@@ -95,7 +95,7 @@ extend ElfFile {
             out.write(b"\nRelocations from ").?;
             print_cstr_at(out, self.shstrtab, relsec.name).?;
             out.write(b" (").?;
-            out.print("{} entries)\n", [&count]).?;
+            out.print("{} entries)\n", &[&count]).?;
             found = true;
 
             var j: u64 = 0;
@@ -114,10 +114,10 @@ extend ElfFile {
                 );
                 var sym_index = rel.symbol_index(self.header.class);
                 let rel_kind = rel.kind(self.header.class);
-                out.print("  0x{:012x}  type={}  sym={}", [&rel.offset, &rel_kind, &sym_index]).?;
+                out.print("  0x{:012x}  type={}  sym={}", &[&rel.offset, &rel_kind, &sym_index]).?;
                 if rela and rel.addend != 0 {
                     let addend = rel.addend as i64;
-                    out.print("  addend={}", [&addend]).?;
+                    out.print("  addend={}", &[&addend]).?;
                 }
                 if has_symtab {
                     var name = CStr::from_ptr(c"");

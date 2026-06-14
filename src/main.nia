@@ -15,16 +15,18 @@ using process::{ExitCode, Init, exit};
 using util::bytes_eq;
 
 fn parse_u64_arg(arg: process::Arg) ?u64 {
-    switch fmt::parse[u64](arg) {
-        !value => ?value,
-        error! => null,
+    if let !value = fmt::parse[u64](arg) {
+        ?value
+    } else error! {
+        null
     }
 }
 
 fn parse_usize_arg(arg: process::Arg) ?usize {
-    let value = switch parse_u64_arg(arg) {
-        ?parsed => parsed,
-        null => return null,
+    let value = if let ?parsed = parse_u64_arg(arg) {
+        parsed
+    } else null {
+        return null;
     };
     if value > usize::MAX as u64 {
         return null;
@@ -35,44 +37,39 @@ fn parse_usize_arg(arg: process::Arg) ?usize {
 
 fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::GeneralPurposeAllocator) ExitCode!i32 {
     var cwd: fs::Dir;
-    switch fs::Dir::cwd() {
-        !value => cwd = value,
-        error! => {
-            out.err(b"error: cannot open current directory\n").?;
-            return !1;
-        },
+    if let !value = fs::Dir::cwd() {
+        cwd = value;
+    } else error! {
+        out.err(b"error: cannot open current directory\n").?;
+        return !1;
     }
     defer {
-        switch cwd.close() {
-            !ok => _ = ok,
-            error! => {},
-        };
+        if let !ok = cwd.close() {
+            _ = ok;
+        } else error! {}
     };
 
     var file: fs::File;
-    switch cwd.open_encoded_file(fs::EncodedPath::init(cli.path.raw_ptr()), fs::OpenOptions::read_only()) {
-        !value => file = value,
-        error! => {
-            out.err(b"error: cannot open ").?;
-            out.err_cstr(cli.path).?;
-            out.err(b"\n").?;
-            return !1;
-        },
+    if let !value = cwd.open_encoded_file(fs::EncodedPath::init(cli.path.raw_ptr()), fs::OpenOptions::read_only()) {
+        file = value;
+    } else error! {
+        out.err(b"error: cannot open ").?;
+        out.err_cstr(cli.path).?;
+        out.err(b"\n").?;
+        return !1;
     }
     defer {
-        switch file.close() {
-            !ok => _ = ok,
-            error! => {},
-        };
+        if let !ok = file.close() {
+            _ = ok;
+        } else error! {}
     };
 
     var raw_size: u64;
-    switch file.len() {
-        !value => raw_size = value,
-        error! => {
-            out.err(b"error: cannot determine file size\n").?;
-            return !1;
-        },
+    if let !value = file.len() {
+        raw_size = value;
+    } else error! {
+        out.err(b"error: cannot determine file size\n").?;
+        return !1;
     }
 
     if raw_size > usize::MAX as u64 {
@@ -87,41 +84,39 @@ fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::Ge
     }
 
     var bytes: &mut [u8];
-    switch allocator.alloc_slice[u8](size) {
-        !value => bytes = value,
-        error! => {
-            out.err(b"error: out of memory reading ").?;
-            out.err_cstr(cli.path).?;
-            out.err(b"\n").?;
-            return !1;
-        },
+    if let !value = allocator.alloc_slice[u8](size) {
+        bytes = value;
+    } else error! {
+        out.err(b"error: out of memory reading ").?;
+        out.err_cstr(cli.path).?;
+        out.err(b"\n").?;
+        return !1;
     }
     defer {
-        switch allocator.free_slice[u8](bytes) {
-            !ok => _ = ok,
-            error! => {},
-        };
+        if let !ok = allocator.free_slice[u8](bytes) {
+            _ = ok;
+        } else error! {}
     };
 
     var read_buffer: [4096]u8 = [0; 4096];
     var reader = file.reader(init.io(), &mut read_buffer);
-    switch reader.read_exact(bytes) {
-        !ok => _ = ok,
-        error! => {
-            out.err(b"error: short read from ").?;
-            out.err_cstr(cli.path).?;
-            out.err(b"\n").?;
-            return !1;
-        },
+    if let !ok = reader.read_exact(bytes) {
+        _ = ok;
+    } else error! {
+        out.err(b"error: short read from ").?;
+        out.err_cstr(cli.path).?;
+        out.err(b"\n").?;
+        return !1;
     }
 
     elf::inspect_bytes(out, bytes, size, cli)
 }
 
 fn arg_or(args: process::Args, index: usize, fallback: CStr) CStr {
-    switch args.get(index) {
-        ?value => value.cstr(),
-        null => fallback,
+    if let ?value = args.get(index) {
+        value.cstr()
+    } else null {
+        fallback
     }
 }
 
@@ -137,9 +132,10 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
     switch argc {
         0..=1 => return print_help(out, prog),
         2 => {
-            let arg1 = switch require_arg(args, 1) {
-                ?value => value,
-                null => return print_help(out, prog),
+            let arg1 = if let ?value = require_arg(args, 1) {
+                value
+            } else null {
+                return print_help(out, prog);
             };
             let arg1_bytes = arg1.bytes();
             if bytes_eq(arg1_bytes, b"-h") or bytes_eq(arg1_bytes, b"--help") or bytes_eq(arg1_bytes, b"help") {
@@ -149,13 +145,15 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
             return inspect_path(init, out, &cli, allocator);
         },
         3 => {
-            let arg1 = switch require_arg(args, 1) {
-                ?value => value,
-                null => return print_help(out, prog),
+            let arg1 = if let ?value = require_arg(args, 1) {
+                value
+            } else null {
+                return print_help(out, prog);
             };
-            let arg2 = switch require_arg(args, 2) {
-                ?value => value,
-                null => return print_error_usage(out, prog, b"missing argument"),
+            let arg2 = if let ?value = require_arg(args, 2) {
+                value
+            } else null {
+                return print_error_usage(out, prog, b"missing argument");
             };
             let arg2_bytes = arg2.bytes();
 
@@ -173,38 +171,44 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
                 return inspect_path(init, out, &cli, allocator);
             }
 
-            let addr = switch parse_u64_arg(arg2) {
-                ?value => value,
-                null => return print_error_usage(out, prog, b"unknown command or invalid address"),
+            let addr = if let ?value = parse_u64_arg(arg2) {
+                value
+            } else null {
+                return print_error_usage(out, prog, b"unknown command or invalid address");
             };
             var cli = Cli::resolve(arg1.cstr(), addr);
             return inspect_path(init, out, &cli, allocator);
         },
         4..=5 => {
-            let arg1 = switch require_arg(args, 1) {
-                ?value => value,
-                null => return print_help(out, prog),
+            let arg1 = if let ?value = require_arg(args, 1) {
+                value
+            } else null {
+                return print_help(out, prog);
             };
-            let arg2 = switch require_arg(args, 2) {
-                ?value => value,
-                null => return print_error_usage(out, prog, b"missing command"),
+            let arg2 = if let ?value = require_arg(args, 2) {
+                value
+            } else null {
+                return print_error_usage(out, prog, b"missing command");
             };
-            let arg3 = switch require_arg(args, 3) {
-                ?value => value,
-                null => return print_error_usage(out, prog, b"missing argument"),
+            let arg3 = if let ?value = require_arg(args, 3) {
+                value
+            } else null {
+                return print_error_usage(out, prog, b"missing argument");
             };
             let arg2_bytes = arg2.bytes();
 
             if bytes_eq(arg2_bytes, b"dump") {
                 var len = DEFAULT_DUMP_LEN;
                 if argc == 5 {
-                    let arg4 = switch require_arg(args, 4) {
-                        ?value => value,
-                        null => return print_error_usage(out, prog, b"missing length"),
+                    let arg4 = if let ?value = require_arg(args, 4) {
+                        value
+                    } else null {
+                        return print_error_usage(out, prog, b"missing length");
                     };
-                    len = switch parse_u64_arg(arg4) {
-                        ?value => value,
-                        null => return print_error_usage(out, prog, b"invalid dump length"),
+                    len = if let ?value = parse_u64_arg(arg4) {
+                        value
+                    } else null {
+                        return print_error_usage(out, prog, b"invalid dump length");
                     };
                 }
                 var cli = Cli::dump(arg1.cstr(), arg3.cstr(), len);
@@ -214,13 +218,15 @@ fn run(init: Init, out: &mut Output, allocator: &mut mem::GeneralPurposeAllocato
             if bytes_eq(arg2_bytes, b"strings") {
                 var min_len = DEFAULT_STRING_MIN;
                 if argc == 5 {
-                    let arg4 = switch require_arg(args, 4) {
-                        ?value => value,
-                        null => return print_error_usage(out, prog, b"missing minimum length"),
+                    let arg4 = if let ?value = require_arg(args, 4) {
+                        value
+                    } else null {
+                        return print_error_usage(out, prog, b"missing minimum length");
                     };
-                    min_len = switch parse_usize_arg(arg4) {
-                        ?value => value,
-                        null => return print_error_usage(out, prog, b"invalid minimum length"),
+                    min_len = if let ?value = parse_usize_arg(arg4) {
+                        value
+                    } else null {
+                        return print_error_usage(out, prog, b"invalid minimum length");
                     };
                 }
                 var cli = Cli::strings(arg1.cstr(), arg3.cstr(), min_len);
@@ -246,10 +252,9 @@ pub fn main(init: Init) ExitCode!void {
     var gpa = mem::GeneralPurposeAllocator::init(&mut page);
     let allocator = &mut gpa;
     defer {
-        switch gpa.deinit().ok() {
-            !ok => _ = ok,
-            error! => {},
-        };
+        if let !ok = gpa.deinit().ok() {
+            _ = ok;
+        } else error! {}
     };
 
     let code = run(init, &mut out, allocator).?;

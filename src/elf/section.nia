@@ -96,9 +96,10 @@ extend SectionHeader {
 
 extend ElfFile {
     fn parse_u64_bytes(text: &[u8]) ?u64 {
-        switch fmt::parse[u64](text) {
-            !value => ?value,
-            error! => null,
+        if let !value = fmt::parse[u64](text) {
+            ?value
+        } else error! {
+            null
         }
     }
 
@@ -119,12 +120,11 @@ extend ElfFile {
 
         var i: u16 = 0;
         while i < count {
-            let off = switch util::table_entry_offset(header.shoff, i as u64, header.shentsize as u64, buf.len()) {
-                ?value => value,
-                null => {
-                    file.section_count = i;
-                    break;
-                },
+            let off = if let ?value = util::table_entry_offset(header.shoff, i as u64, header.shentsize as u64, buf.len()) {
+                value
+            } else null {
+                file.section_count = i;
+                break;
             };
             file.sections[i as usize] =
                 SectionHeader::read(buf, header.class, off, header.little);
@@ -136,10 +136,9 @@ extend ElfFile {
         // that table and are validated by cstr_at before printing/comparison.
         if header.shstrndx < file.section_count {
             var shstr = file.sections[header.shstrndx as usize];
-            switch util::file_range(buf.len(), shstr.offset, shstr.size) {
-                ?range => file.shstrtab = &buf[range.start..range.end],
-                null => {},
-            };
+            if let ?range = util::file_range(buf.len(), shstr.offset, shstr.size) {
+                file.shstrtab = &buf[range.start..range.end];
+            } else null {}
         }
 
         // Precompute the section containing the entry point so summary output
@@ -179,9 +178,10 @@ extend ElfFile {
         // NOBITS sections such as .bss may not have backing file bytes. Any
         // invalid range is represented explicitly instead of being disguised as
         // an empty slice.
-        switch util::file_range(buf.len(), section.offset, section.size) {
-            ?range => ?&buf[range.start..range.end],
-            null => null,
+        if let ?range = util::file_range(buf.len(), section.offset, section.size) {
+            ?&buf[range.start..range.end]
+        } else null {
+            null
         }
     }
 
@@ -207,13 +207,12 @@ extend ElfFile {
         }
 
         var len = wanted_len;
-        switch offset.checked_add(len) {
-            ?end => {
-                if end > buf.len() as u64 {
-                    len = buf.len() as u64 - offset;
-                }
-            },
-            null => len = buf.len() as u64 - offset,
+        if let ?end = offset.checked_add(len) {
+            if end > buf.len() as u64 {
+                len = buf.len() as u64 - offset;
+            }
+        } else null {
+            len = buf.len() as u64 - offset;
         }
 
         // Produce a classic 16-byte hex row with an ASCII gutter.
@@ -260,14 +259,13 @@ extend ElfFile {
         // section name such as ".text".
         let target_bytes = target.bytes();
         if util::starts_with_at(target_bytes) {
-            let offset = switch parse_u64_bytes(util::after_at(target_bytes)) {
-                ?value => value,
-                null => {
-                    out.err(b"error: invalid dump offset '").?;
-                    out.err_cstr(target).?;
-                    out.err(b"'\n").?;
-                    return !1;
-                },
+            let offset = if let ?value = parse_u64_bytes(util::after_at(target_bytes)) {
+                value
+            } else null {
+                out.err(b"error: invalid dump offset '").?;
+                out.err_cstr(target).?;
+                out.err(b"'\n").?;
+                return !1;
             };
             return self.dump_range(out, buf, offset, wanted_len);
         }
@@ -296,14 +294,13 @@ extend ElfFile {
             return !1;
         }
 
-        var bytes = switch self.section_bytes(buf, &section) {
-            ?value => value,
-            null => {
-                out.err(b"error: section '").?;
-                out.err_cstr(section_name).?;
-                out.err(b"' is outside the file\n").?;
-                return !1;
-            },
+        var bytes = if let ?value = self.section_bytes(buf, &section) {
+            value
+        } else null {
+            out.err(b"error: section '").?;
+            out.err_cstr(section_name).?;
+            out.err(b"' is outside the file\n").?;
+            return !1;
         };
         if bytes.len() == 0 {
             out.err(b"error: section '").?;

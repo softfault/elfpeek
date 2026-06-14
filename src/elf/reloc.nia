@@ -68,13 +68,12 @@ extend ElfFile {
                 i += 1;
                 continue;
             }
-            switch util::file_range(buf.len(), relsec.offset, relsec.size) {
-                ?range => _ = range,
-                null => {
-                    i += 1;
-                    continue;
-                },
-            };
+            if let ?range = util::file_range(buf.len(), relsec.offset, relsec.size) {
+                _ = range;
+            } else null {
+                i += 1;
+                continue;
+            }
 
             var symtab = SectionHeader::empty();
             var has_symtab = false;
@@ -100,9 +99,10 @@ extend ElfFile {
 
             var j: u64 = 0;
             while j < count {
-                let off = switch util::table_entry_offset(relsec.offset, j, entsize, buf.len()) {
-                    ?value => value,
-                    null => break,
+                let off = if let ?value = util::table_entry_offset(relsec.offset, j, entsize, buf.len()) {
+                    value
+                } else null {
+                    break;
                 };
 
                 var rel = RelocationInfo::read(

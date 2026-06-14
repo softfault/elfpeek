@@ -143,9 +143,10 @@ extend ProgramHeader {
         if self.kind != PT_LOAD or addr < self.vaddr {
             return false;
         }
-        let end = switch self.vaddr.checked_add(self.memsz) {
-            ?value => value,
-            null => return false,
+        let end = if let ?value = self.vaddr.checked_add(self.memsz) {
+            value
+        } else null {
+            return false;
         };
         addr < end
     }
@@ -177,9 +178,10 @@ extend SectionHeader {
         if (self.flags & SHF_ALLOC) == 0 or self.addr == 0 or addr < self.addr {
             return false;
         }
-        let end = switch self.addr.checked_add(self.size) {
-            ?value => value,
-            null => return false,
+        let end = if let ?value = self.addr.checked_add(self.size) {
+            value
+        } else null {
+            return false;
         };
         addr < end
     }
@@ -239,9 +241,10 @@ extend SymbolInfo {
         if self.value == 0 or self.size == 0 or addr < self.value {
             return false;
         }
-        let end = switch self.value.checked_add(self.size) {
-            ?value => value,
-            null => return false,
+        let end = if let ?value = self.value.checked_add(self.size) {
+            value
+        } else null {
+            return false;
         };
         addr < end
     }

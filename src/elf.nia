@@ -42,13 +42,12 @@ fn print_program_headers(
 
     var i: u16 = 0;
     while i < phnum {
-        let off = switch util::table_entry_offset(phoff, i as u64, phentsize as u64, size) {
-            ?value => value,
-            null => {
-                out.write(b"  ").?;
-                out.print("{}  <truncated>\n", &[&i]).?;
-                break;
-            },
+        let off = if let ?value = util::table_entry_offset(phoff, i as u64, phentsize as u64, size) {
+            value
+        } else null {
+            out.write(b"  ").?;
+            out.print("{}  <truncated>\n", &[&i]).?;
+            break;
         };
 
         var ph = ProgramHeader::read(buf, class, off, little);

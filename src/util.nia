@@ -13,9 +13,10 @@ pub(package) struct ByteRange {
 // bounds. Keep the conversion in one checked helper so callers cannot forget the
 // overflow and end <= len parts of validation.
 pub(package) fn file_range(buf_len: usize, offset: u64, size: u64) ?ByteRange {
-    let end64 = switch offset.checked_add(size) {
-        ?value => value,
-        null => return null,
+    let end64 = if let ?value = offset.checked_add(size) {
+        value
+    } else null {
+        return null;
     };
     if offset > buf_len as u64 or end64 > buf_len as u64 {
         return null;
@@ -30,17 +31,20 @@ pub(package) fn file_range(buf_len: usize, offset: u64, size: u64) ?ByteRange {
 // Both index * entsize and base + relative can overflow in corrupt files, so the
 // parser asks for a checked entry offset before calling the raw field readers.
 pub(package) fn table_entry_offset(table_offset: u64, index: u64, entsize: u64, buf_len: usize) ?usize {
-    let relative = switch index.checked_mul(entsize) {
-        ?value => value,
-        null => return null,
+    let relative = if let ?value = index.checked_mul(entsize) {
+        value
+    } else null {
+        return null;
     };
-    let offset = switch table_offset.checked_add(relative) {
-        ?value => value,
-        null => return null,
+    let offset = if let ?value = table_offset.checked_add(relative) {
+        value
+    } else null {
+        return null;
     };
-    switch file_range(buf_len, offset, entsize) {
-        ?range => ?range.start,
-        null => null,
+    if let ?range = file_range(buf_len, offset, entsize) {
+        ?range.start
+    } else null {
+        null
     }
 }
 

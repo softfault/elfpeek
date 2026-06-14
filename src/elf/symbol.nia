@@ -53,22 +53,25 @@ extend ElfFile {
         if index == 0 or symtab.entsize == 0 or symtab.link >= self.section_count as u32 {
             return false;
         }
-        let relative = switch index.checked_mul(symtab.entsize) {
-            ?value => value,
-            null => return false,
+        let relative = if let ?value = index.checked_mul(symtab.entsize) {
+            value
+        } else null {
+            return false;
         };
         if relative >= symtab.size {
             return false;
         }
 
-        var strtab = switch self.section_bytes(buf, &self.sections[symtab.link as usize]) {
-            ?value => value,
-            null => return false,
+        var strtab = if let ?value = self.section_bytes(buf, &self.sections[symtab.link as usize]) {
+            value
+        } else null {
+            return false;
         };
 
-        let off = switch util::table_entry_offset(symtab.offset, index, symtab.entsize, buf.len()) {
-            ?value => value,
-            null => return false,
+        let off = if let ?value = util::table_entry_offset(symtab.offset, index, symtab.entsize, buf.len()) {
+            value
+        } else null {
+            return false;
         };
 
         var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
@@ -83,9 +86,10 @@ extend ElfFile {
             return !{};
         }
 
-        var strtab = switch self.section_bytes(buf, &self.sections[symtab.link as usize]) {
-            ?value => value,
-            null => return !{},
+        var strtab = if let ?value = self.section_bytes(buf, &self.sections[symtab.link as usize]) {
+            value
+        } else null {
+            return !{};
         };
 
         out.write(b"\n").?;
@@ -94,9 +98,10 @@ extend ElfFile {
         var count = symtab.size / symtab.entsize;
         var i: u64 = 1;
         while i < count {
-            let off = switch util::table_entry_offset(symtab.offset, i, symtab.entsize, buf.len()) {
-                ?value => value,
-                null => break,
+            let off = if let ?value = util::table_entry_offset(symtab.offset, i, symtab.entsize, buf.len()) {
+                value
+            } else null {
+                break;
             };
             var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
             if sym.printable() {
@@ -154,20 +159,20 @@ extend ElfFile {
                     continue;
                 }
 
-                var strtab = switch self.section_bytes(buf, &self.sections[symtab.link as usize]) {
-                    ?value => value,
-                    null => {
-                        si += 1;
-                        continue;
-                    },
+                var strtab = if let ?value = self.section_bytes(buf, &self.sections[symtab.link as usize]) {
+                    value
+                } else null {
+                    si += 1;
+                    continue;
                 };
 
                 var count = symtab.size / symtab.entsize;
                 var i: u64 = 1;
                 while i < count {
-                    let off = switch util::table_entry_offset(symtab.offset, i, symtab.entsize, buf.len()) {
-                        ?value => value,
-                        null => break,
+                    let off = if let ?value = util::table_entry_offset(symtab.offset, i, symtab.entsize, buf.len()) {
+                        value
+                    } else null {
+                        break;
                     };
                     var sym = SymbolInfo::read(buf, self.header.class, off, self.header.little);
                     if not sym.printable() or not sym.before_or_at(addr) {
@@ -227,9 +232,10 @@ extend ElfFile {
         var found_segment = false;
         var i: u16 = 0;
         while i < self.header.phnum {
-            let off = switch util::table_entry_offset(self.header.phoff, i as u64, self.header.phentsize as u64, buf.len()) {
-                ?value => value,
-                null => break,
+            let off = if let ?value = util::table_entry_offset(self.header.phoff, i as u64, self.header.phentsize as u64, buf.len()) {
+                value
+            } else null {
+                break;
             };
 
             var ph = ProgramHeader::read(

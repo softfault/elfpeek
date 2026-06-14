@@ -46,7 +46,7 @@ fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::Ge
     defer {
         if let !ok = cwd.close() {
             _ = ok;
-        } else error! {}
+        }
     };
 
     var file: fs::File;
@@ -61,7 +61,7 @@ fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::Ge
     defer {
         if let !ok = file.close() {
             _ = ok;
-        } else error! {}
+        }
     };
 
     var raw_size: u64;
@@ -95,7 +95,7 @@ fn inspect_path(init: Init, out: &mut Output, cli: &Cli, allocator: &mut mem::Ge
     defer {
         if let !ok = allocator.free_slice[u8](bytes) {
             _ = ok;
-        } else error! {}
+        }
     };
 
     var read_buffer: [4096]u8 = [0; 4096];
@@ -254,7 +254,7 @@ pub fn main(init: Init) ExitCode!void {
     defer {
         if let !ok = gpa.deinit().ok() {
             _ = ok;
-        } else error! {}
+        }
     };
 
     let code = run(init, &mut out, allocator).?;

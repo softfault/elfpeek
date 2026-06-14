@@ -138,7 +138,7 @@ extend ElfFile {
             var shstr = file.sections[header.shstrndx as usize];
             if let ?range = util::file_range(buf.len(), shstr.offset, shstr.size) {
                 file.shstrtab = &buf[range.start..range.end];
-            } else null {}
+            }
         }
 
         // Precompute the section containing the entry point so summary output
